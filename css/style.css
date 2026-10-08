@@ -30,3 +30,12 @@ th{color:#64d4ad;font-size:12px;letter-spacing:.05em}
 .badge{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #345062;font-size:11px}
 .badge.KRITIKAL,.badge.SEGERA{font-weight:900}
 @media(max-width:700px){.assignment-focus{grid-template-columns:1fr}.message-head small{margin-left:0;width:100%}.route-box{flex-direction:column}}
+
+.cor-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0 26px}
+.cor-metrics>div{padding:16px;border:1px solid #203746;border-radius:14px;background:#08131c;display:grid;gap:6px}
+.cor-metrics small{color:#8fa5b4;font-weight:800}
+.cor-metrics strong{font-size:32px;color:#64d4ad}
+.message-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.eyebrow{color:#64d4ad;font-size:12px;font-weight:900;letter-spacing:.12em;margin:0 0 6px}
+hr{border:0;border-top:1px solid #203746;margin:26px 0}
+@media(max-width:800px){.cor-metrics{grid-template-columns:repeat(2,1fr)}}
