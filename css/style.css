@@ -13,3 +13,20 @@ th{color:#64d4ad;font-size:12px;letter-spacing:.05em}
 .muted{color:#9fb0bd}.danger{background:#9f3340}.secondary{background:#173243}
 .notice{padding:12px 14px;border:1px solid #294353;border-radius:12px;background:#0a151e}
 @media(max-width:700px){.form-grid{grid-template-columns:1fr}.form-grid .full{grid-column:auto}.shell{width:min(94vw,1180px)}}
+
+.assignment-focus{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
+.assignment-focus>div{display:grid;gap:5px;padding:16px;border:1px solid #203746;border-radius:14px;background:#08131c}
+.assignment-focus small{color:#8fa5b4;font-weight:800;font-size:11px;letter-spacing:.08em}
+.assignment-focus strong{font-size:24px;color:#64d4ad}
+.assignment-focus span{color:#dce7ef}
+.action-card button{margin-top:8px}
+.route-box{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px;margin:12px 0 20px;border:1px solid #294353;border-radius:14px;background:#08131c;color:#64d4ad;font-weight:800;text-align:center}
+.message-list{display:grid;gap:12px}
+.message{padding:18px;border:1px solid #203746;border-radius:15px;background:#08131c}
+.message h3{margin:10px 0 6px}.message p{white-space:pre-wrap;color:#d8e2e9}
+.message-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.message-head small{margin-left:auto;color:#8fa5b4}
+.message-route{margin-top:12px;color:#8fa5b4;font-size:13px}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #345062;font-size:11px}
+.badge.KRITIKAL,.badge.SEGERA{font-weight:900}
+@media(max-width:700px){.assignment-focus{grid-template-columns:1fr}.message-head small{margin-left:0;width:100%}.route-box{flex-direction:column}}
