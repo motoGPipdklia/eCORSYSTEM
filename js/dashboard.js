@@ -423,10 +423,16 @@ async function setMessageStatus(id, status) {
 
 async function replyInstruction(source) {
   if (!source?.dari_tempat_tugas_id) return;
-  const title=prompt(`Tajuk arahan kepada ${source.dari?.kod||'tempat tugas'}:`);
-  if (!title) return;
-  const body=prompt('Kandungan arahan:');
-  if (!body) return;
+
+  // FIX 012: Balasan mengekalkan tajuk/perkara asal. Pengguna hanya isi catatan.
+  const title = (source.tajuk || '').trim();
+  if (!title) {
+    alert('Tajuk asal tidak ditemui. Sila muat semula halaman dan cuba lagi.');
+    return;
+  }
+
+  const body = prompt(`Catatan balasan kepada ${source.dari?.kod || 'tempat tugas'}:`);
+  if (!body || !body.trim()) return;
 
   const { error }=await supabase.from('ecor_komunikasi').insert({
     operasi_id: assignment.operasi_id,
@@ -434,14 +440,15 @@ async function replyInstruction(source) {
     dari_tempat_tugas_id: assignment.tempat_tugas_id,
     kepada_tempat_tugas_id: source.dari_tempat_tugas_id,
     jenis:'ARAHAN',
-    tajuk:title.trim(),
+    tajuk:title,
     kandungan:body.trim(),
     keutamaan:source.keutamaan || 'BIASA',
     status:'DIHANTAR'
   });
   if (error) { alert(error.message); return; }
-  alert(`Arahan berjaya dihantar kepada ${source.dari?.kod||'tempat tugas'}.`);
-  await loadCorInbox();
+  alert(`Balasan berjaya dihantar kepada ${source.dari?.kod||'tempat tugas'}.`);
+  if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
+  if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   await loadCommunication();
 }
 
