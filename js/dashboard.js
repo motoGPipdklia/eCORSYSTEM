@@ -756,6 +756,7 @@ async function loadIcpInbox() {
       <div class="message-actions">
         <button data-icp-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
         <button data-icp-reply="${x.id}">BALAS</button>
+        <button data-icp-forward="${x.id}">MAJU KE SALURAN ATASAN</button>
       </div>
     </article>`).join('') : '<p class="muted">Tiada laporan daripada submodul ICP.</p>';
 
@@ -765,6 +766,74 @@ async function loadIcpInbox() {
   box.querySelectorAll('[data-icp-reply]').forEach(b =>
     b.onclick = () => replyInstruction(rows.find(x => x.id === b.dataset.icpReply))
   );
+  box.querySelectorAll('[data-icp-forward]').forEach(b =>
+    b.onclick = () => forwardIcpReport(rows.find(x => x.id === b.dataset.icpForward), b)
+  );
+}
+
+async function forwardIcpReport(source, button) {
+  if (!source?.id || !assignment) return;
+
+  const currentCode = String(assignment.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
+  if (currentCode !== 'ICP') return;
+
+  // ICP mesti memajukan laporan hanya kepada saluran atasannya, iaitu COR.
+  if (!parentPlace || String(parentPlace.kod || '').trim().toUpperCase() !== 'COR') {
+    alert('Saluran atasan ICP → COR tidak tersedia. Semak parent tempat tugas ICP.');
+    return;
+  }
+
+  if (!confirm(`Majukan laporan "${source.tajuk || '-'}" kepada COR?`)) return;
+
+  // Kunci butang serta-merta untuk mengelakkan double-click / penghantaran berganda.
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'SEDANG DIMAJUKAN...';
+  }
+
+  const payload = {
+    operasi_id: assignment.operasi_id,
+    pengirim_id: session.user.id,
+    dari_tempat_tugas_id: assignment.tempat_tugas_id,
+    kepada_tempat_tugas_id: parentPlace.id,
+    jenis: 'LAPORAN',
+    tajuk: source.tajuk,
+    kandungan: source.kandungan,
+    keutamaan: source.keutamaan || 'BIASA',
+    status: 'DIHANTAR'
+  };
+
+  const sent = await supabase.from('ecor_komunikasi').insert(payload).select('id').single();
+  if (sent.error) {
+    if (button) { button.disabled = false; button.textContent = 'MAJU KE SALURAN ATASAN'; }
+    alert(`Gagal memajukan laporan ke COR: ${sent.error.message}`);
+    return;
+  }
+
+  // Selepas berjaya dimajukan, tutup rekod asal di Peti Masuk ICP.
+  // Ini memastikan laporan yang sama tidak boleh dimajukan kali kedua.
+  const closed = await supabase
+    .from('ecor_komunikasi')
+    .update({ status: 'DITERIMA' })
+    .eq('id', source.id)
+    .eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
+    .select('id,status')
+    .maybeSingle();
+
+  if (closed.error || !closed.data) {
+    // Laporan sudah sampai ke COR. Kekalkan butang terkunci supaya pengguna
+    // tidak menghantar salinan kedua dalam sesi semasa.
+    if (button) button.textContent = 'TELAH DIMAJUKAN';
+    alert(`Laporan telah dihantar ke COR, tetapi rekod asal ICP gagal ditutup. ${closed.error?.message || 'Semak polisi RLS UPDATE ecor_komunikasi.'}`);
+    await loadCommunication();
+    return;
+  }
+
+  if (button) button.textContent = 'TELAH DIMAJUKAN';
+  alert('Laporan berjaya dimajukan dari ICP ke COR.');
+  await loadIcpInbox();
+  await loadCommunication();
 }
 
 // ===== ADU FASA 3 =====
