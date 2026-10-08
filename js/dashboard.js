@@ -704,10 +704,9 @@ async function renderAduModule(){
  <label>Tag ADU Semasa<select id="aduSemasa">${aduOptions()}</select></label>
  <label class="full">Catatan Penilaian<textarea id="aduCatatan"></textarea></label></div><button type="submit">DAFTAR MANGSA</button></form>
  <p id="aduStatus" class="status"></p><h3>Senarai Mangsa Aktif ADU</h3><div id="aduList"></div>
- <div class="adu-transfer"><h3>Rekod Keluar ADU</h3><div id="aduTransferList"><p class="muted">Tiada rekod pemindahan.</p></div></div><hr>
- <h3>Hantar Laporan ADU ke COR</h3><label>Catatan Penyelia ADU<textarea id="aduReportNote"></textarea></label><button id="aduSendReport">HANTAR LAPORAN KE COR</button><p id="aduReportStatus" class="status"></p>`;
+ <div class="adu-transfer"><h3>Rekod Keluar ADU</h3><div id="aduTransferList"><p class="muted">Tiada rekod pemindahan.</p></div></div>`;
  document.querySelector('main').appendChild(p);
- $('#aduRefresh').onclick=loadAduData; $('#aduVictimForm').onsubmit=registerAduVictim; $('#aduSendReport').onclick=sendAduReport; await loadAduData();
+ $('#aduRefresh').onclick=loadAduData; $('#aduVictimForm').onsubmit=registerAduVictim; await loadAduData();
 }
 
 async function loadAduData(){
