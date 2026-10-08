@@ -1079,7 +1079,7 @@ async function loadIcpTriageStatus(){
   if(status) status.textContent=`Status mangsa TRIAGE terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
-// ===== FIX 024: ICP — STATUS MANGSA KESELURUHAN (TRIAGE + ADU + SRC/DESTINASI) =====
+// ===== FIX 025: ICP — STATUS MANGSA KESELURUHAN (STATUS TERKINI SEBENAR) =====
 async function renderIcpOverallVictimStatus(){
   $('#icpOverallVictimPanel')?.remove();
   if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ICP') return;
@@ -1088,7 +1088,7 @@ async function renderIcpOverallVictimStatus(){
   const p=document.createElement('section');
   p.id='icpOverallVictimPanel';
   p.className='panel';
-  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — gabungan rekod TRIAGE dan ADU. Rekod mangsa yang sama dikira sekali berdasarkan status/lokasi paling terkini.</p></div><button id="icpOverallVictimRefresh" class="ghost">MUAT SEMULA</button></div>
+  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — status terkini setiap mangsa berdasarkan rekod TRIAGE dan ADU. Mangsa yang sama dikira sekali sahaja.</p></div><button id="icpOverallVictimRefresh" class="ghost">MUAT SEMULA</button></div>
   <div id="icpOverallVictimTable"><p class="muted">Memuatkan data mangsa keseluruhan...</p></div>
   <div id="icpOverallVictimSummary"></div>
   <p id="icpOverallVictimStatus" class="status"></p>`;
@@ -1127,28 +1127,31 @@ async function loadIcpOverallVictimStatus(){
   };
   const normKey=m=>String(m.no_mangsa||m.id||'').trim().toUpperCase();
   const locOf=m=>String(m.status_lokasi||'').trim().toUpperCase();
+  const timeMs=v=>{ const t=v ? new Date(v).getTime() : 0; return Number.isFinite(t)?t:0; };
 
-  // TRIAGE dimasukkan dahulu. Jika mangsa yang sama sudah masuk ADU,
-  // rekod ADU menggantikan rekod TRIAGE kerana ia ialah status yang lebih terkini.
+  // Pilih rekod PALING TERKINI bagi ID mangsa yang sama.
+  // Ini membetulkan keadaan rekod ADU lama menindih rekod TRIAGE yang lebih baharu.
   const latest=new Map();
-  for(const m of (triageQ.data||[])){
-    latest.set(normKey(m), {
-      ...m,
-      sumber:'TRIAGE',
-      tag_semasa:m.tag_triage,
-      masa_rujukan:m.masa_keluar_triage || m.masa_terima_triage
-    });
-  }
-  for(const m of (aduQ.data||[])){
-    latest.set(normKey(m), {
-      ...m,
-      sumber:'ADU',
-      tag_semasa:m.tag_adu_semasa || m.tag_triage,
-      masa_rujukan:m.masa_keluar_adu || m.masa_terima_adu
-    });
-  }
+  const consider=(raw,sumber)=>{
+    const key=normKey(raw); if(!key) return;
+    const isAdu=sumber==='ADU';
+    const masa_rujukan=isAdu
+      ? (raw.masa_keluar_adu || raw.masa_terima_adu)
+      : (raw.masa_keluar_triage || raw.masa_terima_triage);
+    const candidate={
+      ...raw,
+      sumber,
+      tag_semasa:isAdu ? (raw.tag_adu_semasa || raw.tag_triage) : raw.tag_triage,
+      masa_rujukan,
+      _masa:timeMs(masa_rujukan)
+    };
+    const current=latest.get(key);
+    if(!current || candidate._masa>current._masa || (candidate._masa===current._masa && sumber==='ADU')) latest.set(key,candidate);
+  };
+  (triageQ.data||[]).forEach(m=>consider(m,'TRIAGE'));
+  (aduQ.data||[]).forEach(m=>consider(m,'ADU'));
 
-  const rows=[...latest.values()].sort((a,b)=>new Date(a.masa_rujukan||0)-new Date(b.masa_rujukan||0));
+  const rows=[...latest.values()].sort((a,b)=>a._masa-b._masa);
 
   const statusDestinasi=m=>{
     const loc=locOf(m);
@@ -1178,7 +1181,7 @@ async function loadIcpOverallVictimStatus(){
     <div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div>
     <div class="adu-summary-item"><small>8. DALAM TRIAGE</small><strong>${countLoc('DALAM_TRIAGE')}</strong></div>
     <div class="adu-summary-item"><small>9. DALAM ADU</small><strong>${countLoc('DALAM_ADU','ADU')}</strong></div>
-    <div class="adu-summary-item"><small>10. DI SRC</small><strong>${countLoc('SRC')}</strong></div>
+    <div class="adu-summary-item"><small>10. KE SRC</small><strong>${countLoc('SRC')}</strong></div>
     <div class="adu-summary-item"><small>11. KE BHA</small><strong>${countLoc('BHA')}</strong></div>
     <div class="adu-summary-item"><small>12. KE HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
     <div class="adu-summary-item"><small>13. JUMLAH MANGSA KESELURUHAN</small><strong>${rows.length}</strong></div>
