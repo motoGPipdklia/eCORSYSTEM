@@ -29,20 +29,9 @@
     </div>
 
     <div class="assignment-focus">
-      <div>
-        <small>TEMPAT TUGAS</small>
-        <strong id="placeCode">-</strong>
-        <span id="placeName">Tiada penugasan aktif</span>
-      </div>
-      <div>
-        <small>PERANAN</small>
-        <strong id="assignmentRole">-</strong>
-      </div>
-      <div>
-        <small>SALURAN ATASAN</small>
-        <strong id="parentCode">-</strong>
-        <span id="parentName">-</span>
-      </div>
+      <div><small>TEMPAT TUGAS</small><strong id="placeCode">-</strong><span id="placeName">Tiada penugasan aktif</span></div>
+      <div><small>PERANAN</small><strong id="assignmentRole">-</strong></div>
+      <div><small>SALURAN ATASAN</small><strong id="parentCode">-</strong><span id="parentName">-</span></div>
     </div>
     <p id="status" class="status"></p>
   </section>
@@ -53,13 +42,11 @@
       <p id="reportRoute">Destinasi laporan ditentukan automatik oleh hierarki.</p>
       <button id="openReport">HANTAR LAPORAN</button>
     </article>
-
     <article class="card">
       <h2>Arahan Diterima</h2>
       <div class="metric" id="instructionCount">0</div>
       <p>Arahan daripada tempat tugas atasan.</p>
     </article>
-
     <article class="card">
       <h2>Sejarah Komunikasi</h2>
       <div class="metric" id="communicationCount">0</div>
@@ -72,9 +59,7 @@
       <h2>Laporan Operasi</h2>
       <button id="closeReport" class="ghost">TUTUP</button>
     </div>
-    <div class="route-box">
-      <span id="routeFrom">-</span><b>→</b><span id="routeTo">-</span>
-    </div>
+    <div class="route-box"><span id="routeFrom">-</span><b>→</b><span id="routeTo">-</span></div>
     <form id="reportForm">
       <label>Tajuk Laporan
         <input id="reportTitle" required maxlength="180" placeholder="Contoh: Situasi semasa di lokasi">
@@ -101,8 +86,11 @@
   </section>
 
   <section class="panel">
-    <h2>Sejarah Komunikasi</h2>
-    <div id="historyList" class="message-list"><p class="muted">Tiada komunikasi.</p></div>
+    <div class="section-head history-section-head">
+      <h2>Sejarah Komunikasi</h2>
+      <button id="toggleHistory" type="button" class="ghost" aria-expanded="false">PAPAR</button>
+    </div>
+    <div id="historyList" class="message-list" hidden><p class="muted">Tiada komunikasi.</p></div>
   </section>
 
   <section class="panel">
