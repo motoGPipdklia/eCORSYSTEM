@@ -137,6 +137,7 @@ async function loadAssignment() {
   $('#status').textContent = 'Penugasan aktif dimuatkan.';
   await loadCommunication();
   await renderControlRoom();
+  await renderAcccRoom();
 }
 
 function disableReporting() {
@@ -355,7 +356,8 @@ async function loadCorInbox() {
 async function setMessageStatus(id,status) {
   const { error }=await supabase.from('ecor_komunikasi').update({status}).eq('id',id);
   if (error) { alert(error.message); return; }
-  await loadCorInbox();
+  if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
+  if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   await loadCommunication();
 }
 
@@ -381,4 +383,97 @@ async function replyInstruction(source) {
   alert(`Arahan berjaya dihantar kepada ${source.dari?.kod||'tempat tugas'}.`);
   await loadCorInbox();
   await loadCommunication();
+}
+
+async function renderAcccRoom() {
+  const old = document.querySelector('#acccControlPanel');
+  if (old) old.remove();
+
+  const code = assignment?.ecor_tempat_tugas?.kod;
+  if (code !== 'ACCC') return;
+
+  const panel = document.createElement('section');
+  panel.id = 'acccControlPanel';
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">AIRPORT CRISIS CONTROL CENTRE</p>
+        <h2>ACCC — Kawalan Krisis Utama</h2>
+      </div>
+      <button id="refreshAcccInbox" class="ghost">MUAT SEMULA</button>
+    </div>
+    <div class="cor-metrics">
+      <div><small>LAPORAN COR</small><strong id="acccTotal">0</strong></div>
+      <div><small>BELUM DIBACA</small><strong id="acccNew">0</strong></div>
+      <div><small>KRITIKAL</small><strong id="acccCritical">0</strong></div>
+      <div><small>DALAM TINDAKAN</small><strong id="acccAction">0</strong></div>
+    </div>
+    <h3>Peti Masuk ACCC</h3>
+    <p class="muted">Laporan daripada COR dipaparkan di sini. ACCC boleh menandakan status dan menghantar arahan kembali kepada COR.</p>
+    <div id="acccInbox" class="message-list"><p class="muted">Memuatkan laporan COR...</p></div>
+  `;
+
+  document.querySelector('main').appendChild(panel);
+  document.querySelector('#refreshAcccInbox').onclick = loadAcccInbox;
+  await loadAcccInbox();
+}
+
+async function loadAcccInbox() {
+  if (assignment?.ecor_tempat_tugas?.kod !== 'ACCC') return;
+
+  const { data, error } = await supabase
+    .from('ecor_komunikasi')
+    .select(`
+      id,jenis,tajuk,kandungan,keutamaan,status,created_at,pengirim_id,
+      dari_tempat_tugas_id,kepada_tempat_tugas_id,
+      dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
+      kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
+    `)
+    .eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
+    .eq('jenis', 'LAPORAN')
+    .order('created_at', { ascending:false });
+
+  const box = document.querySelector('#acccInbox');
+  if (!box) return;
+  if (error) {
+    box.innerHTML = `<p class="status">${esc(error.message)}</p>`;
+    return;
+  }
+
+  // ACCC hanya memproses laporan yang datang daripada COR.
+  const rows = (data || []).filter(x => x.dari?.kod === 'COR');
+
+  document.querySelector('#acccTotal').textContent = rows.length;
+  document.querySelector('#acccNew').textContent = rows.filter(x => x.status === 'DIHANTAR' || x.status === 'BARU').length;
+  document.querySelector('#acccCritical').textContent = rows.filter(x => x.keutamaan === 'KRITIKAL').length;
+  document.querySelector('#acccAction').textContent = rows.filter(x => x.status === 'DALAM TINDAKAN').length;
+
+  box.innerHTML = rows.length ? rows.map(x => `
+    <article class="message">
+      <div class="message-head">
+        <span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span>
+        <b>COR → ACCC</b>
+        <small>${esc(fmt(x.created_at))}</small>
+      </div>
+      <h3>${esc(x.tajuk)}</h3>
+      <p>${esc(x.kandungan)}</p>
+      <div class="message-route">STATUS: ${esc(x.status)}</div>
+      <div class="message-actions">
+        <button data-accc-read="${x.id}" class="ghost">TANDA DIBACA</button>
+        <button data-accc-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
+        <button data-accc-reply="${x.id}">HANTAR ARAHAN KE COR</button>
+      </div>
+    </article>`).join('') : '<p class="muted">Tiada laporan COR diterima.</p>';
+
+  box.querySelectorAll('[data-accc-read]').forEach(b =>
+    b.onclick = () => setMessageStatus(b.dataset.acccRead, 'DIBACA')
+  );
+  box.querySelectorAll('[data-accc-action]').forEach(b =>
+    b.onclick = () => setMessageStatus(b.dataset.acccAction, 'DALAM TINDAKAN')
+  );
+  box.querySelectorAll('[data-accc-reply]').forEach(b =>
+    b.onclick = () => replyInstruction(rows.find(x => x.id === b.dataset.acccReply))
+  );
 }
