@@ -140,6 +140,7 @@ async function loadAssignment() {
   await renderControlRoom();
   await renderAcccRoom();
   await renderAduModule();
+  await renderTriageModule();
   await renderCorAduStatus();
 }
 
@@ -814,5 +815,64 @@ async function loadCorAduStatus(){
  if(status)status.textContent=`Status mangsa ADU terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
+
+// ===== TRIAGE FIX 023 =====
+const isTriageSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='TRIAGE' &&
+ String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
+
+async function renderTriageModule(){
+ $('#triagePanel')?.remove(); if(!isTriageSupervisor())return; ensureAduStyles();
+ const p=document.createElement('section'); p.id='triagePanel'; p.className='panel';
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">TRIAGE</p><h2>TRIAGE — Pengurusan Mangsa</h2><p class="muted">Mangsa dari kawasan bencana didaftarkan dan dinilai terlebih dahulu di TRIAGE.</p></div><button id="triageRefresh" class="ghost">MUAT SEMULA</button></div>
+ <div class="adu-metrics">${['Putih','Merah','Kuning','Hijau','Jumlah'].map(x=>`<div class="adu-metric"><small>${x.toUpperCase()}</small><strong id="triage${x}">0</strong></div>`).join('')}</div>
+ <h3>Daftar Mangsa TRIAGE</h3><form id="triageVictimForm"><div class="adu-grid">
+ <label>No./ID Mangsa<input id="triageNo" required placeholder="Contoh: MANGSA-001"></label><label>Nama Mangsa<input id="triageNama" placeholder="BELUM DIKENAL PASTI"></label>
+ <label>No. KP / Pasport<input id="triageId"></label><label>Jantina<select id="triageJantina"><option value="">- PILIH -</option><option>LELAKI</option><option>PEREMPUAN</option><option>TIDAK DIKETAHUI</option></select></label>
+ <label>Warganegara<input id="triageNegara"></label><label>Tag TRIAGE<select id="triageTag">${aduOptions()}</select></label>
+ <label class="full">Catatan Penilaian Awal<textarea id="triageCatatan"></textarea></label></div><button type="submit">DAFTAR MANGSA</button></form>
+ <p id="triageStatus" class="status"></p><h3>Senarai Mangsa Aktif TRIAGE</h3><div id="triageList"></div>
+ <div class="adu-transfer"><h3>Rekod Keluar TRIAGE</h3><div id="triageTransferList"><p class="muted">Tiada rekod pemindahan.</p></div></div>`;
+ document.querySelector('main').appendChild(p);
+ $('#triageRefresh').onclick=loadTriageData; $('#triageVictimForm').onsubmit=registerTriageVictim; await loadTriageData();
+}
+async function loadTriageData(){
+ if(!isTriageSupervisor())return;
+ const q=await supabase.from('ecor_triage_mangsa').select('*').eq('operasi_id',assignment.operasi_id).order('masa_terima_triage',{ascending:false});
+ const rows=q.data||[], box=$('#triageList'), transfer=$('#triageTransferList'); if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
+ const active=rows.filter(m=>String(m.status_lokasi||'DALAM_TRIAGE').toUpperCase()==='DALAM_TRIAGE'), moved=rows.filter(m=>String(m.status_lokasi||'DALAM_TRIAGE').toUpperCase()!=='DALAM_TRIAGE');
+ const count=t=>active.filter(m=>String(m.tag_triage||'').toUpperCase()===t).length;
+ $('#triagePutih').textContent=count('PUTIH');$('#triageMerah').textContent=count('MERAH');$('#triageKuning').textContent=count('KUNING');$('#triageHijau').textContent=count('HIJAU');$('#triageJumlah').textContent=active.length;
+ box.innerHTML=active.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>MASA TERIMA</th><th>TAG TRIAGE</th><th>JANTINA</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${active.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td>${esc(fmt(m.masa_terima_triage))}</td><td><span class="adu-tag">${aduDot(m.tag_triage)} ${esc(m.tag_triage)}</span></td><td><span class="adu-gender">${esc(m.jantina||'BELUM DIKENALPASTI')}</span></td><td>${esc(m.catatan||'-')}</td><td><div class="adu-actions"><button class="ghost" data-tu="${m.id}">KEMAS KINI TAG</button><button class="ghost" data-tm="${m.id}">PINDAH / KELUAR TRIAGE</button><button class="ghost" data-th="${m.id}">SEJARAH TAG</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa aktif di TRIAGE.</p>';
+ transfer.innerHTML=moved.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>TAG AKHIR</th><th>DESTINASI</th><th>MASA KELUAR</th><th>CATATAN</th></tr></thead><tbody>${moved.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${aduDot(m.tag_triage)} ${esc(m.tag_triage)}</td><td class="adu-destination">${esc(m.destinasi||m.status_lokasi)}</td><td>${esc(fmt(m.masa_keluar_triage))}</td><td>${esc(m.catatan_pemindahan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada rekod pemindahan.</p>';
+ box.querySelectorAll('[data-tu]').forEach(x=>x.onclick=()=>updateTriageTag(active.find(m=>m.id===x.dataset.tu)));box.querySelectorAll('[data-tm]').forEach(x=>x.onclick=()=>transferTriageVictim(active.find(m=>m.id===x.dataset.tm)));box.querySelectorAll('[data-th]').forEach(x=>x.onclick=()=>showTriageHistory(active.find(m=>m.id===x.dataset.th)));
+}
+async function registerTriageVictim(e){
+ e.preventDefault();const st=$('#triageStatus');st.textContent='Menyimpan...';
+ const payload={operasi_id:assignment.operasi_id,no_mangsa:$('#triageNo').value.trim(),nama_mangsa:$('#triageNama').value.trim()||null,no_pengenalan:$('#triageId').value.trim()||null,jantina:$('#triageJantina').value||null,warganegara:$('#triageNegara').value.trim()||null,tag_triage:$('#triageTag').value,catatan:$('#triageCatatan').value.trim()||null,didaftarkan_oleh:session.user.id,status_lokasi:'DALAM_TRIAGE'};
+ const q=await supabase.from('ecor_triage_mangsa').insert(payload);if(q.error){st.textContent=q.error.message;return}e.target.reset();st.textContent='Mangsa berjaya didaftarkan di TRIAGE.';await loadTriageData();
+}
+async function updateTriageTag(m){
+ const v=prompt(`Tag TRIAGE semasa: ${m.tag_triage}\nMasukkan tag baharu: PUTIH / MERAH / KUNING / HIJAU`,m.tag_triage);if(!v)return;const t=v.trim().toUpperCase();if(!ADU_TAGS.includes(t)){alert('Tag tidak sah.');return}if(t===m.tag_triage){alert('Tag tidak berubah.');return}
+ const note=prompt(`Catatan perubahan ${m.tag_triage} → ${t}:`)||'';const q=await supabase.from('ecor_triage_mangsa').update({tag_triage:t,catatan:note.trim()||m.catatan||null}).eq('id',m.id);if(q.error){alert(q.error.message);return}
+ await supabase.from('ecor_triage_sejarah_tag').insert({mangsa_id:m.id,operasi_id:assignment.operasi_id,tag_sebelum:m.tag_triage,tag_baharu:t,catatan:note.trim()||null,diubah_oleh:session.user.id});await loadTriageData();
+}
+async function transferTriageVictim(m){
+ const raw=prompt('Destinasi keluar TRIAGE:\n1 = ADU\n2 = BODY HOLDING AREA (BHA)\n3 = HOSPITAL','1');if(!raw)return;
+ if(raw.trim()==='1'){await moveTriageVictim(m,'ADU','AIR DISASTER UNIT (ADU)',prompt('Catatan pemindahan ke ADU:')||'');return}
+ if(raw.trim()==='2'){if(String(m.tag_triage).toUpperCase()!=='PUTIH'&&!confirm('Tag TRIAGE bukan PUTIH. Teruskan ke BHA?'))return;await moveTriageVictim(m,'BHA','BODY HOLDING AREA (BHA)',prompt('Catatan pemindahan ke BHA:')||'');return}
+ if(raw.trim()==='3'){const h=prompt('Masukkan nama hospital berdekatan:');if(!h?.trim())return;await moveTriageVictim(m,'HOSPITAL',h.trim(),prompt(`Catatan pemindahan ke ${h.trim()}:`)||'');return}alert('Pilihan tidak sah.');
+}
+async function moveTriageVictim(m,statusLokasi,destinasi,note=''){
+ if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari TRIAGE ke ${destinasi}?`))return;
+ if(statusLokasi==='ADU'){
+  const ex=await supabase.from('ecor_adu_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return}
+  if(!ex.data){const a=await supabase.from('ecor_adu_mangsa').insert({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_triage:m.tag_triage,tag_adu_semasa:m.tag_triage,catatan:note.trim()||m.catatan||null,didaftarkan_oleh:session.user.id,status_lokasi:'DALAM_ADU'});if(a.error){alert(`Gagal menghantar rekod ke ADU: ${a.error.message}`);return}}
+ }
+ const q=await supabase.from('ecor_triage_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_triage:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id);if(q.error){alert(q.error.message);return}alert(`Mangsa berjaya dipindahkan ke ${destinasi}.`);await loadTriageData();
+}
+async function showTriageHistory(m){
+ const q=await supabase.from('ecor_triage_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return}
+ alert(`SEJARAH TAG TRIAGE — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
+}
 // FIX 019: mula aplikasi hanya selepas semua const/fungsi modul ADU selesai diinisialisasi.
 await boot();
