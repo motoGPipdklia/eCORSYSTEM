@@ -61,6 +61,7 @@ async function boot() {
   $('#profil').textContent = [profile.pangkat, profile.no_badan, profile.peranan]
     .filter(Boolean).join(' • ');
 
+  setupHistoryToggle();
   await loadAssignment();
 }
 
@@ -147,6 +148,57 @@ function disableReporting() {
   $('#assignmentRole').textContent = '-';
   $('#parentCode').textContent = '-';
   $('#parentName').textContent = '-';
+}
+
+
+function setupHistoryToggle() {
+  const historyList = document.querySelector('#historyList');
+  const panel = historyList?.closest('section');
+  if (!historyList || !panel) return;
+
+  let head = panel.querySelector('.history-section-head');
+  const existingBtn = panel.querySelector('#toggleHistory');
+
+  if (existingBtn && !existingBtn.dataset.bound) {
+    historyList.hidden = true;
+    existingBtn.dataset.bound = '1';
+    existingBtn.addEventListener('click', () => {
+      const isHidden = historyList.hidden;
+      historyList.hidden = !isHidden;
+      existingBtn.textContent = isHidden ? 'TUTUP' : 'PAPAR';
+      existingBtn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+    return;
+  }
+
+  if (!head) {
+    const title = panel.querySelector('h2');
+    if (!title) return;
+
+    head = document.createElement('div');
+    head.className = 'section-head history-section-head';
+
+    title.parentNode.insertBefore(head, title);
+    head.appendChild(title);
+
+    const btn = document.createElement('button');
+    btn.id = 'toggleHistory';
+    btn.type = 'button';
+    btn.className = 'ghost';
+    btn.textContent = 'PAPAR';
+    btn.setAttribute('aria-expanded', 'false');
+    head.appendChild(btn);
+
+    // Sentiasa tertutup apabila halaman mula dibuka.
+    historyList.hidden = true;
+
+    btn.addEventListener('click', () => {
+      const isHidden = historyList.hidden;
+      historyList.hidden = !isHidden;
+      btn.textContent = isHidden ? 'TUTUP' : 'PAPAR';
+      btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+  }
 }
 
 async function loadCommunication() {
