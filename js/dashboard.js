@@ -911,7 +911,7 @@ async function updateAduTag(m){
 }
 
 async function transferAduVictim(m){
- const raw=prompt('Destinasi keluar ADU:\n1 = BODY HOLDING AREA (BHA)\n2 = HOSPITAL','2'); if(!raw)return;
+ const raw=prompt('Destinasi keluar ADU:\n1 = BODY HOLDING AREA (BHA)\n2 = HOSPITAL\n3 = SURVIVOR RECEPTION CENTRE (SRC)','2'); if(!raw)return;
  if(raw.trim()==='1'){
    if(String(m.tag_adu_semasa||'').toUpperCase()!=='PUTIH' && !confirm('Tag semasa bukan PUTIH. Teruskan pemindahan ke BHA?'))return;
    const note=prompt('Catatan pemindahan ke BHA:')||'';
@@ -921,6 +921,10 @@ async function transferAduVictim(m){
    const hospital=prompt('Masukkan nama hospital berdekatan:'); if(!hospital?.trim())return;
    const note=prompt(`Catatan pemindahan ke ${hospital.trim()}:`)||'';
    await moveAduVictim(m,'HOSPITAL',hospital.trim(),note); return;
+ }
+ if(raw.trim()==='3'){
+   const note=prompt('Catatan pemindahan ke SURVIVOR RECEPTION CENTRE (SRC):')||'';
+   await moveAduVictim(m,'SRC','SURVIVOR RECEPTION CENTRE (SRC)',note); return;
  }
  alert('Pilihan tidak sah.');
 }
@@ -973,7 +977,7 @@ async function loadCorAduStatus(){
  if(box) box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:760px"><thead><tr><th style="width:80px">BIL</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><span class="adu-tag">${aduDot(m.tag_adu_semasa)} <span>${esc(m.tag_adu_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td>${esc(String(m.status_lokasi||'DALAM_ADU')==='DALAM_ADU'?'DALAM ADU':(m.destinasi||m.status_lokasi))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa ADU direkodkan.</p>';
  const countTag=t=>rows.filter(m=>String(m.tag_adu_semasa||'').toUpperCase()===t).length;
  const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
- if(summary) summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid"><div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div><div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div><div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div><div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div><div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div><div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div><div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div><div class="adu-summary-item"><small>8. KE BHA</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="BHA").length}</strong></div><div class="adu-summary-item"><small>9. KE HOSPITAL</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="HOSPITAL").length}</strong></div><div class="adu-summary-item"><small>JUMLAH MANGSA</small><strong>${rows.length}</strong></div></div></div>`;
+ if(summary) summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid"><div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div><div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div><div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div><div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div><div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div><div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div><div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div><div class="adu-summary-item"><small>8. KE BHA</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="BHA").length}</strong></div><div class="adu-summary-item"><small>9. KE HOSPITAL</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="HOSPITAL").length}</strong></div><div class="adu-summary-item"><small>10. KE SRC</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="SRC").length}</strong></div><div class="adu-summary-item"><small>JUMLAH MANGSA</small><strong>${rows.length}</strong></div></div></div>`;
  if(status)status.textContent=`Status mangsa ADU terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
@@ -1026,6 +1030,7 @@ async function loadIcpTriageStatus(){
     if(loc==='ADU') return m.destinasi || 'AIR DISASTER UNIT (ADU)';
     if(loc==='BHA') return m.destinasi || 'BODY HOLDING AREA (BHA)';
     if(loc==='HOSPITAL') return m.destinasi || 'HOSPITAL';
+    if(loc==='SRC') return m.destinasi || 'SURVIVOR RECEPTION CENTRE (SRC)';
     return m.destinasi || m.status_lokasi || '-';
   };
 
@@ -1065,7 +1070,8 @@ async function loadIcpTriageStatus(){
       <div class="adu-summary-item"><small>8. KE ADU</small><strong>${countLoc('ADU')}</strong></div>
       <div class="adu-summary-item"><small>9. KE BHA</small><strong>${countLoc('BHA')}</strong></div>
       <div class="adu-summary-item"><small>10. KE HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
-      <div class="adu-summary-item"><small>11. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
+      <div class="adu-summary-item"><small>11. KE SRC</small><strong>${countLoc('SRC')}</strong></div>
+      <div class="adu-summary-item"><small>12. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
     </div>
   </div>`;
 
@@ -1113,10 +1119,12 @@ async function updateTriageTag(m){
  await supabase.from('ecor_triage_sejarah_tag').insert({mangsa_id:m.id,operasi_id:assignment.operasi_id,tag_sebelum:m.tag_triage,tag_baharu:t,catatan:note.trim()||null,diubah_oleh:session.user.id});await loadTriageData();
 }
 async function transferTriageVictim(m){
- const raw=prompt('Destinasi keluar TRIAGE:\n1 = ADU\n2 = BODY HOLDING AREA (BHA)\n3 = HOSPITAL','1');if(!raw)return;
+ const raw=prompt('Destinasi keluar TRIAGE:\n1 = ADU\n2 = BODY HOLDING AREA (BHA)\n3 = HOSPITAL\n4 = SURVIVOR RECEPTION CENTRE (SRC)','1');if(!raw)return;
  if(raw.trim()==='1'){await moveTriageVictim(m,'ADU','AIR DISASTER UNIT (ADU)',prompt('Catatan pemindahan ke ADU:')||'');return}
  if(raw.trim()==='2'){if(String(m.tag_triage).toUpperCase()!=='PUTIH'&&!confirm('Tag TRIAGE bukan PUTIH. Teruskan ke BHA?'))return;await moveTriageVictim(m,'BHA','BODY HOLDING AREA (BHA)',prompt('Catatan pemindahan ke BHA:')||'');return}
- if(raw.trim()==='3'){const h=prompt('Masukkan nama hospital berdekatan:');if(!h?.trim())return;await moveTriageVictim(m,'HOSPITAL',h.trim(),prompt(`Catatan pemindahan ke ${h.trim()}:`)||'');return}alert('Pilihan tidak sah.');
+ if(raw.trim()==='3'){const h=prompt('Masukkan nama hospital berdekatan:');if(!h?.trim())return;await moveTriageVictim(m,'HOSPITAL',h.trim(),prompt(`Catatan pemindahan ke ${h.trim()}:`)||'');return}
+ if(raw.trim()==='4'){await moveTriageVictim(m,'SRC','SURVIVOR RECEPTION CENTRE (SRC)',prompt('Catatan pemindahan ke SURVIVOR RECEPTION CENTRE (SRC):')||'');return}
+ alert('Pilihan tidak sah.');
 }
 async function moveTriageVictim(m,statusLokasi,destinasi,note=''){
  if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari TRIAGE ke ${destinasi}?`))return;
