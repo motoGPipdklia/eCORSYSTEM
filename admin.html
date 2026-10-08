@@ -1,1 +1,37 @@
-<!doctype html><html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pentadbir | eCOR</title><link rel="stylesheet" href="css/style.css"></head><body><header class="top"><div><b>eCOR SYSTEM</b><span>PENTADBIR</span></div><button id="logout" class="ghost">LOG KELUAR</button></header><main class="shell"><section class="hero"><p>CONTROL PANEL</p><h1>Dashboard Pentadbir</h1><div id="adminName">Memuatkan...</div></section><section class="grid"><article class="card"><h2>Operasi</h2><div class="metric" id="operasiCount">–</div><p>Operasi berdaftar</p></article><article class="card"><h2>Pengguna</h2><div class="metric" id="userCount">–</div><p>Profil eCOR</p></article><article class="card"><h2>Tempat Tugas</h2><div class="metric" id="tempatCount">–</div><p>Struktur komunikasi</p></article><article class="card"><h2>Penugasan</h2><div class="metric" id="assignCount">–</div><p>Penugasan aktif</p></article></section><section class="panel"><h2>Pengurusan</h2><div class="actions"><button id="refresh">MUAT SEMULA DATA</button><button disabled>DAFTAR PENGGUNA — V1.4</button><button disabled>PENGURUSAN OPERASI — V1.4</button><button disabled>PENUGASAN — V1.4</button></div><p id="status" class="status"></p></section></main><script type="module" src="js/admin.js"></script></body></html>
+<!doctype html><html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pentadbir | eCOR</title><link rel="stylesheet" href="css/style.css"></head><body>
+<header class="top"><div><b>eCOR SYSTEM</b><span>PENTADBIR</span></div><button id="logout" class="ghost">LOG KELUAR</button></header>
+<main class="shell">
+<section class="hero"><p>CONTROL PANEL</p><h1>Dashboard Pentadbir</h1><div id="adminName">Memuatkan...</div></section>
+<section class="grid">
+<article class="card"><h2>Operasi</h2><div class="metric" id="operasiCount">–</div><p>Operasi berdaftar</p></article>
+<article class="card"><h2>Pengguna</h2><div class="metric" id="userCount">–</div><p>Profil eCOR</p></article>
+<article class="card"><h2>Tempat Tugas</h2><div class="metric" id="tempatCount">–</div><p>Struktur komunikasi</p></article>
+<article class="card"><h2>Penugasan</h2><div class="metric" id="assignCount">–</div><p>Penugasan aktif</p></article>
+</section>
+<section class="panel"><h2>Pengurusan</h2><div class="actions">
+<button id="refresh">MUAT SEMULA DATA</button><button data-open="penggunaPanel">DAFTAR PENGGUNA</button><button data-open="operasiPanel">PENGURUSAN OPERASI</button><button data-open="penugasanPanel">PENUGASAN</button>
+</div><p id="status" class="status"></p></section>
+
+<section id="penggunaPanel" class="panel hidden"><div class="section-head"><h2>Daftar Pengguna</h2><button class="ghost" data-close>TUTUP</button></div>
+<form id="userForm" class="form-grid">
+<label>No. Badan<input id="uNoBadan"></label><label>Pangkat<input id="uPangkat"></label>
+<label class="full">Nama<input id="uNama" required></label><label>No. Telefon<input id="uTelefon"></label>
+<label>E-mel<input id="uEmail" type="email" required></label><label>Kata Laluan<input id="uPassword" type="password" minlength="6" required></label>
+<label>Peranan<select id="uPeranan"><option value="PETUGAS">PETUGAS</option><option value="PENYELIA">PENYELIA</option><option value="KETUA_TEMPAT_TUGAS">KETUA TEMPAT TUGAS</option><option value="DECISION_MAKER">DECISION MAKER</option></select></label>
+<div class="full actions"><button type="submit">DAFTAR PENGGUNA</button></div></form>
+<p id="userStatus" class="status"></p><div class="table-wrap"><table><thead><tr><th>NO BADAN</th><th>PANGKAT</th><th>NAMA</th><th>TELEFON</th><th>PERANAN</th><th>STATUS</th></tr></thead><tbody id="userRows"></tbody></table></div></section>
+
+<section id="operasiPanel" class="panel hidden"><div class="section-head"><h2>Pengurusan Operasi</h2><button class="ghost" data-close>TUTUP</button></div>
+<form id="operationForm" class="form-grid">
+<label class="full">Nama Operasi<input id="oNama" required></label><label>Jenis Insiden<input id="oJenis"></label><label>Lokasi<input id="oLokasi"></label>
+<label>Tarikh/Masa Mula<input id="oMula" type="datetime-local"></label><label>Tarikh/Masa Tamat<input id="oTamat" type="datetime-local"></label>
+<div class="full actions"><button type="submit">CIPTA OPERASI</button></div></form>
+<p id="operationStatus" class="status"></p><div class="table-wrap"><table><thead><tr><th>OPERASI</th><th>INSIDEN</th><th>LOKASI</th><th>MULA</th><th>TAMAT</th><th>STATUS</th></tr></thead><tbody id="operationRows"></tbody></table></div></section>
+
+<section id="penugasanPanel" class="panel hidden"><div class="section-head"><h2>Penugasan Tempat Tugas</h2><button class="ghost" data-close>TUTUP</button></div>
+<form id="assignmentForm" class="form-grid">
+<label>Operasi<select id="aOperasi" required></select></label><label>Pengguna<select id="aPengguna" required></select></label>
+<label>Tempat Tugas<select id="aTempat" required></select></label><label>Peranan<select id="aPeranan"><option value="PETUGAS">PETUGAS</option><option value="PENYELIA">PENYELIA</option><option value="KETUA_TEMPAT_TUGAS">KETUA TEMPAT TUGAS</option><option value="DECISION_MAKER">DECISION MAKER</option></select></label>
+<div class="full actions"><button type="submit">SIMPAN PENUGASAN</button></div></form>
+<p id="assignmentStatus" class="status"></p><div class="table-wrap"><table><thead><tr><th>OPERASI</th><th>PENGGUNA</th><th>TEMPAT TUGAS</th><th>PERANAN</th><th>STATUS</th><th>TINDAKAN</th></tr></thead><tbody id="assignmentRows"></tbody></table></div></section>
+</main><script type="module" src="js/admin.js"></script></body></html>
