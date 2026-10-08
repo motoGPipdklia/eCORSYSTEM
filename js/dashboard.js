@@ -755,15 +755,35 @@ async function sendAduReport(){
 async function renderCorAduStatus(){
  $('#corAduPanel')?.remove(); if(assignment?.ecor_tempat_tugas?.kod!=='COR')return; ensureAduStyles();
  const p=document.createElement('section'); p.id='corAduPanel'; p.className='panel';
- p.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>Status Mangsa ADU</h2><p class="muted">VIEW ONLY — berdasarkan Tag ADU semasa.</p></div><button id="corAduRefresh" class="ghost">MUAT SEMULA</button></div><div class="adu-metrics">${['Putih','Merah','Kuning','Hijau','Jumlah'].map(x=>`<div class="adu-metric"><small>${x.toUpperCase()}</small><strong id="corAdu${x}">0</strong></div>`).join('')}</div><p id="corAduStatus" class="status"></p>`;
- ($('#controlRoomPanel')||document.querySelector('main')).insertAdjacentElement($('#controlRoomPanel')?'afterend':'beforeend',p); $('#corAduRefresh').onclick=loadCorAduStatus; await loadCorAduStatus();
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>Status Mangsa ADU</h2><p class="muted">VIEW ONLY — berdasarkan Tag ADU semasa.</p></div><button id="corAduRefresh" class="ghost">MUAT SEMULA</button></div>
+ <div id="corAduTable"><p class="muted">Memuatkan data mangsa ADU...</p></div>
+ <div id="corAduSummary"></div>
+ <p id="corAduStatus" class="status"></p>`;
+ ($('#controlRoomPanel')||document.querySelector('main')).insertAdjacentElement($('#controlRoomPanel')?'afterend':'beforeend',p);
+ $('#corAduRefresh').onclick=loadCorAduStatus;
+ await loadCorAduStatus();
 }
 
 async function loadCorAduStatus(){
- const q=await supabase.from('ecor_adu_ringkasan').select('*').eq('operasi_id',assignment.operasi_id).maybeSingle();
- if(q.error){$('#corAduStatus').textContent=q.error.message;return} const r=q.data||{};
- $('#corAduPutih').textContent=r.putih||0; $('#corAduMerah').textContent=r.merah||0; $('#corAduKuning').textContent=r.kuning||0; $('#corAduHijau').textContent=r.hijau||0; $('#corAduJumlah').textContent=r.jumlah_mangsa||0; $('#corAduStatus').textContent='Status mangsa ADU terkini.';
+ const q=await supabase.from('ecor_adu_mangsa')
+   .select('id,no_mangsa,nama_mangsa,jantina,tag_adu_semasa,catatan,masa_terima_adu')
+   .eq('operasi_id',assignment.operasi_id)
+   .order('masa_terima_adu',{ascending:true});
+ const box=$('#corAduTable'), summary=$('#corAduSummary'), status=$('#corAduStatus');
+ if(q.error){ if(box)box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`; if(status)status.textContent=q.error.message; return; }
+ const rows=q.data||[];
+ const normGender=v=>{
+   const x=String(v||'').trim().toUpperCase();
+   if(x==='LELAKI')return 'LELAKI';
+   if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA';
+   return 'BELUM DIKENALPASTI';
+ };
+ if(box) box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:760px"><thead><tr><th>BIL</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td>${aduDot(m.tag_adu_semasa)} <strong>${esc(m.tag_adu_semasa||'-')}</strong></td><td>${esc(normGender(m.jantina))}</td><td>${esc(m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa ADU direkodkan.</p>';
+ const countTag=t=>rows.filter(m=>String(m.tag_adu_semasa||'').toUpperCase()===t).length;
+ const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
+ if(summary) summary.innerHTML=`<div style="margin-top:22px;border-top:1px solid #244052;padding-top:18px"><h3>JUMLAH KESELURUHAN</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 24px;line-height:1.8"><div><b>1. PUTIH :</b> ${countTag('PUTIH')}</div><div><b>2. MERAH :</b> ${countTag('MERAH')}</div><div><b>3. KUNING :</b> ${countTag('KUNING')}</div><div><b>4. HIJAU :</b> ${countTag('HIJAU')}</div><div><b>5. JANTINA (LELAKI) :</b> ${countGender('LELAKI')}</div><div><b>6. JANTINA (WANITA) :</b> ${countGender('WANITA')}</div><div><b>7. JANTINA (BELUM DIKENALPASTI) :</b> ${countGender('BELUM DIKENALPASTI')}</div></div></div>`;
+ if(status)status.textContent=`Status mangsa ADU terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
-// FIX 018: mula aplikasi hanya selepas semua const/fungsi modul ADU selesai diinisialisasi.
+// FIX 019: mula aplikasi hanya selepas semua const/fungsi modul ADU selesai diinisialisasi.
 await boot();
