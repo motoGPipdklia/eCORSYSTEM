@@ -195,7 +195,7 @@ function messageCard(m) {
   const isCorSentToAccc = currentCode === 'COR' && m.dari?.kod === 'COR' && m.kepada?.kod === 'ACCC';
   const statusText = isCorSentToAccc && m.status === 'DIBACA'
     ? 'DIBACA OLEH ACCC'
-    : isCorSentToAccc && m.status === 'DALAM TINDAKAN'
+    : isCorSentToAccc && m.status === 'DALAM_TINDAKAN'
       ? 'DALAM TINDAKAN OLEH ACCC'
       : m.status;
 
@@ -337,7 +337,7 @@ async function loadCorInbox() {
   document.querySelector('#corTotal').textContent=rows.length;
   document.querySelector('#corNew').textContent=rows.filter(x=>x.status==='DIHANTAR'||x.status==='BARU').length;
   document.querySelector('#corCritical').textContent=rows.filter(x=>x.keutamaan==='KRITIKAL').length;
-  document.querySelector('#corAction').textContent=rows.filter(x=>x.status==='DALAM TINDAKAN').length;
+  document.querySelector('#corAction').textContent=rows.filter(x=>x.status==='DALAM_TINDAKAN').length;
 
   box.innerHTML=rows.length ? rows.map(x=>`
     <article class="message">
@@ -348,7 +348,7 @@ async function loadCorInbox() {
       </div>
       <h3>${esc(x.tajuk)}</h3>
       <p>${esc(x.kandungan)}</p>
-      <div class="message-route">STATUS: ${esc(x.status)}</div>
+      <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
       <div class="message-actions">
         <button data-read="${x.id}" class="ghost">TANDA DIBACA</button>
         <button data-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
@@ -357,7 +357,7 @@ async function loadCorInbox() {
     </article>`).join('') : '<p class="muted">Tiada laporan diterima.</p>';
 
   box.querySelectorAll('[data-read]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.read,'DIBACA'));
-  box.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.action,'DALAM TINDAKAN'));
+  box.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.action,'DALAM_TINDAKAN'));
   box.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.reply)));
 }
 
@@ -384,7 +384,7 @@ async function setMessageStatus(id, status) {
   }
 
   // Beri maklum balas terus kepada ACCC/COR selepas butang ditekan.
-  const label = status === 'DIBACA' ? 'TANDA DIBACA' : status;
+  const label = status === 'DIBACA' ? 'TANDA DIBACA' : (status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : status);
   alert(`Status berjaya dikemas kini: ${label}`);
 
   if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
@@ -479,7 +479,7 @@ async function loadAcccInbox() {
   document.querySelector('#acccTotal').textContent = rows.length;
   document.querySelector('#acccNew').textContent = rows.filter(x => x.status === 'DIHANTAR' || x.status === 'BARU').length;
   document.querySelector('#acccCritical').textContent = rows.filter(x => x.keutamaan === 'KRITIKAL').length;
-  document.querySelector('#acccAction').textContent = rows.filter(x => x.status === 'DALAM TINDAKAN').length;
+  document.querySelector('#acccAction').textContent = rows.filter(x => x.status === 'DALAM_TINDAKAN').length;
 
   box.innerHTML = rows.length ? rows.map(x => `
     <article class="message">
@@ -490,7 +490,7 @@ async function loadAcccInbox() {
       </div>
       <h3>${esc(x.tajuk)}</h3>
       <p>${esc(x.kandungan)}</p>
-      <div class="message-route">STATUS: ${esc(x.status)}</div>
+      <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
       <div class="message-actions">
         <button data-accc-read="${x.id}" class="ghost">TANDA DIBACA</button>
         <button data-accc-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
@@ -502,7 +502,7 @@ async function loadAcccInbox() {
     b.onclick = () => setMessageStatus(b.dataset.acccRead, 'DIBACA')
   );
   box.querySelectorAll('[data-accc-action]').forEach(b =>
-    b.onclick = () => setMessageStatus(b.dataset.acccAction, 'DALAM TINDAKAN')
+    b.onclick = () => setMessageStatus(b.dataset.acccAction, 'DALAM_TINDAKAN')
   );
   box.querySelectorAll('[data-accc-reply]').forEach(b =>
     b.onclick = () => replyInstruction(rows.find(x => x.id === b.dataset.acccReply))
