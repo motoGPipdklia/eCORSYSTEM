@@ -381,13 +381,11 @@ async function loadCorInbox() {
       <p>${esc(x.kandungan)}</p>
       <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
       <div class="message-actions">
-        <button data-read="${x.id}" class="ghost">TANDA DIBACA</button>
         <button data-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
-        <button data-reply="${x.id}">HANTAR ARAHAN</button>
+        <button data-reply="${x.id}">BALAS</button>
       </div>
     </article>`).join('') : '<p class="muted">Tiada laporan diterima.</p>';
 
-  box.querySelectorAll('[data-read]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.read,'DIBACA'));
   box.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.action,'DALAM_TINDAKAN'));
   box.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.reply)));
 }
@@ -523,15 +521,11 @@ async function loadAcccInbox() {
       <p>${esc(x.kandungan)}</p>
       <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
       <div class="message-actions">
-        <button data-accc-read="${x.id}" class="ghost">TANDA DIBACA</button>
         <button data-accc-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
-        <button data-accc-reply="${x.id}">HANTAR ARAHAN KE COR</button>
+        <button data-accc-reply="${x.id}">BALAS</button>
       </div>
     </article>`).join('') : '<p class="muted">Tiada laporan COR diterima.</p>';
 
-  box.querySelectorAll('[data-accc-read]').forEach(b =>
-    b.onclick = () => setMessageStatus(b.dataset.acccRead, 'DIBACA')
-  );
   box.querySelectorAll('[data-accc-action]').forEach(b =>
     b.onclick = () => setMessageStatus(b.dataset.acccAction, 'DALAM_TINDAKAN')
   );
