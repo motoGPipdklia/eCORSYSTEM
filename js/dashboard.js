@@ -185,9 +185,84 @@ async function loadCommunication() {
     ? instructionTable(instructions)
     : '<p class="muted">Tiada arahan diterima.</p>';
 
+  // KRONOLOGI: hanya LAPORAN / ARAHAN yang DITERIMA oleh tempat tugas semasa.
+  // Susunan paling awal di atas supaya perjalanan komunikasi mudah diikuti.
+  const receivedChronology = rows
+    .filter(x =>
+      x.kepada_tempat_tugas_id === assignment.tempat_tugas_id &&
+      (x.jenis === 'LAPORAN' || x.jenis === 'ARAHAN')
+    )
+    .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+  renderChronology(receivedChronology);
+
   $('#historyList').innerHTML = rows.length
     ? rows.map(messageCard).join('')
     : '<p class="muted">Tiada komunikasi direkodkan.</p>';
+}
+
+
+function renderChronology(items) {
+  let panel = document.querySelector('#chronologyPanel');
+
+  if (!panel) {
+    const instructionList = document.querySelector('#instructionList');
+    const instructionPanel = instructionList?.closest('section');
+    if (!instructionPanel) return;
+
+    panel = document.createElement('section');
+    panel.id = 'chronologyPanel';
+    panel.className = 'panel';
+    panel.innerHTML = `
+      <h2>KRONOLOGI</h2>
+      <div id="chronologyList" class="message-list">
+        <p class="muted">Tiada laporan atau arahan diterima.</p>
+      </div>`;
+    instructionPanel.insertAdjacentElement('afterend', panel);
+  }
+
+  const box = panel.querySelector('#chronologyList');
+  if (!box) return;
+
+  box.innerHTML = items.length
+    ? chronologyTable(items)
+    : '<p class="muted">Tiada laporan atau arahan diterima.</p>';
+}
+
+function chronologyTable(items) {
+  const body = items.map((m, index) => {
+    const dt = m.created_at ? new Date(m.created_at) : null;
+    const tarikh = dt ? dt.toLocaleDateString('ms-MY') : '-';
+    const masa = dt ? dt.toLocaleTimeString('ms-MY', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }) : '-';
+    const penghantar = m.dari?.kod || m.dari?.nama || '-';
+
+    return `<tr>
+      <td>${index + 1}</td>
+      <td>${esc(tarikh)}</td>
+      <td>${esc(masa)}</td>
+      <td><strong>${esc(m.tajuk || '-')}</strong></td>
+      <td>${esc(m.kandungan || '-')}</td>
+      <td><strong>${esc(penghantar)}</strong></td>
+    </tr>`;
+  }).join('');
+
+  return `<div style="overflow-x:auto;width:100%;">
+    <table style="width:100%;border-collapse:collapse;min-width:980px;">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">BIL</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">TARIKH</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">MASA</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">PERKARA</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">CATATAN</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">PENGHANTAR</th>
+        </tr>
+      </thead>
+      <tbody>${body.replaceAll('<td>', '<td style="padding:12px;border-bottom:1px solid #1b3444;vertical-align:top;">')}</tbody>
+    </table>
+  </div>`;
 }
 
 
