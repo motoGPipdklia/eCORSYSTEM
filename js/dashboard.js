@@ -197,7 +197,7 @@ function messageCard(m) {
     ? 'DIBACA OLEH ACCC'
     : isCorSentToAccc && m.status === 'DALAM_TINDAKAN'
       ? 'DALAM TINDAKAN OLEH ACCC'
-      : m.status;
+      : (m.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : m.status);
 
   return `<article class="message">
     <div class="message-head">
