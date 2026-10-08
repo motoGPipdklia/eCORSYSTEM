@@ -1169,11 +1169,11 @@ async function loadCorAduStatus(){
     <div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div>
     <div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div>
     <div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div>
-    <div class="adu-summary-item"><small>8. DALAM TRIAGE</small><strong>${countLoc('DALAM_TRIAGE')}</strong></div>
-    <div class="adu-summary-item"><small>9. DALAM ADU</small><strong>${countLoc('DALAM_ADU','ADU')}</strong></div>
-    <div class="adu-summary-item"><small>10. KE BHA</small><strong>${countLoc('BHA')}</strong></div>
-    <div class="adu-summary-item"><small>11. KE HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
-    <div class="adu-summary-item"><small>12. KE SRC</small><strong>${countLoc('SRC')}</strong></div>
+    <div class="adu-summary-item"><small>8. TRIAGE</small><strong>${countLoc('DALAM_TRIAGE')}</strong></div>
+    <div class="adu-summary-item"><small>9. ADU</small><strong>${countLoc('DALAM_ADU','ADU')}</strong></div>
+    <div class="adu-summary-item"><small>10. BHA</small><strong>${countLoc('BHA')}</strong></div>
+    <div class="adu-summary-item"><small>11. HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
+    <div class="adu-summary-item"><small>12. SRC</small><strong>${countLoc('SRC')}</strong></div>
     <div class="adu-summary-item"><small>13. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
   </div></div>`;
   if(status)status.textContent=`Status mangsa keseluruhan terkini. Jumlah mangsa: ${rows.length}.`;
@@ -1375,8 +1375,8 @@ async function loadIcpOverallVictimStatus(){
     <div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div>
     <div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div>
     <div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div>
-    <div class="adu-summary-item"><small>8. DALAM TRIAGE</small><strong>${countLoc('DALAM_TRIAGE')}</strong></div>
-    <div class="adu-summary-item"><small>9. DALAM ADU</small><strong>${countLoc('DALAM_ADU','ADU')}</strong></div>
+    <div class="adu-summary-item"><small>8. TRIAGE</small><strong>${countLoc('DALAM_TRIAGE')}</strong></div>
+    <div class="adu-summary-item"><small>9. ADU</small><strong>${countLoc('DALAM_ADU','ADU')}</strong></div>
     <div class="adu-summary-item"><small>10. KE SRC</small><strong>${countLoc('SRC')}</strong></div>
     <div class="adu-summary-item"><small>11. KE BHA</small><strong>${countLoc('BHA')}</strong></div>
     <div class="adu-summary-item"><small>12. KE HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
