@@ -153,52 +153,33 @@ function disableReporting() {
 
 function setupHistoryToggle() {
   const historyList = document.querySelector('#historyList');
-  const panel = historyList?.closest('section');
-  if (!historyList || !panel) return;
+  const btn = document.querySelector('#toggleHistory');
+  if (!historyList || !btn) return;
 
-  let head = panel.querySelector('.history-section-head');
-  const existingBtn = panel.querySelector('#toggleHistory');
+  // MESTI tertutup setiap kali dashboard dibuka / refresh.
+  historyList.hidden = true;
+  historyList.style.display = 'none';
+  btn.textContent = 'PAPAR';
+  btn.setAttribute('aria-expanded', 'false');
 
-  if (existingBtn && !existingBtn.dataset.bound) {
-    historyList.hidden = true;
-    existingBtn.dataset.bound = '1';
-    existingBtn.addEventListener('click', () => {
-      const isHidden = historyList.hidden;
-      historyList.hidden = !isHidden;
-      existingBtn.textContent = isHidden ? 'TUTUP' : 'PAPAR';
-      existingBtn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
-    });
-    return;
-  }
+  if (btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
 
-  if (!head) {
-    const title = panel.querySelector('h2');
-    if (!title) return;
+  btn.addEventListener('click', () => {
+    const sedangTutup = historyList.hidden || historyList.style.display === 'none';
 
-    head = document.createElement('div');
-    head.className = 'section-head history-section-head';
-
-    title.parentNode.insertBefore(head, title);
-    head.appendChild(title);
-
-    const btn = document.createElement('button');
-    btn.id = 'toggleHistory';
-    btn.type = 'button';
-    btn.className = 'ghost';
-    btn.textContent = 'PAPAR';
-    btn.setAttribute('aria-expanded', 'false');
-    head.appendChild(btn);
-
-    // Sentiasa tertutup apabila halaman mula dibuka.
-    historyList.hidden = true;
-
-    btn.addEventListener('click', () => {
-      const isHidden = historyList.hidden;
-      historyList.hidden = !isHidden;
-      btn.textContent = isHidden ? 'TUTUP' : 'PAPAR';
-      btn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
-    });
-  }
+    if (sedangTutup) {
+      historyList.hidden = false;
+      historyList.style.display = '';
+      btn.textContent = 'TUTUP';
+      btn.setAttribute('aria-expanded', 'true');
+    } else {
+      historyList.hidden = true;
+      historyList.style.display = 'none';
+      btn.textContent = 'PAPAR';
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
 }
 
 async function loadCommunication() {
