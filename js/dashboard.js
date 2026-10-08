@@ -182,12 +182,43 @@ async function loadCommunication() {
   $('#communicationCount').textContent = rows.length;
 
   $('#instructionList').innerHTML = instructions.length
-    ? instructions.map(messageCard).join('')
+    ? instructionTable(instructions)
     : '<p class="muted">Tiada arahan diterima.</p>';
 
   $('#historyList').innerHTML = rows.length
     ? rows.map(messageCard).join('')
     : '<p class="muted">Tiada komunikasi direkodkan.</p>';
+}
+
+
+function instructionTable(instructions) {
+  const rows = instructions.map(m => {
+    const dt = m.created_at ? new Date(m.created_at) : null;
+    const tarikh = dt ? dt.toLocaleDateString('ms-MY') : '-';
+    const masa = dt ? dt.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+    const catatan = m.kandungan || '-';
+
+    return `<tr>
+      <td>${esc(tarikh)}</td>
+      <td>${esc(masa)}</td>
+      <td><strong>${esc(m.tajuk || '-')}</strong></td>
+      <td>${esc(catatan)}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div style="overflow-x:auto;width:100%;">
+    <table style="width:100%;border-collapse:collapse;min-width:720px;">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">TARIKH</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">MASA</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">PERKARA</th>
+          <th style="text-align:left;padding:12px;border-bottom:1px solid #244052;">CATATAN</th>
+        </tr>
+      </thead>
+      <tbody>${rows.replaceAll('<td>', '<td style="padding:12px;border-bottom:1px solid #1b3444;vertical-align:top;">')}</tbody>
+    </table>
+  </div>`;
 }
 
 function messageCard(m) {
