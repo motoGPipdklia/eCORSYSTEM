@@ -997,20 +997,79 @@ async function renderIcpTriageStatus(){
 
 async function loadIcpTriageStatus(){
   if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ICP') return;
+
   const q=await supabase.from('ecor_triage_mangsa')
-    .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,catatan_pemindahan')
+    .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,masa_keluar_triage,catatan_pemindahan')
     .eq('operasi_id',assignment.operasi_id)
-    .eq('status_lokasi','DALAM_TRIAGE')
     .order('masa_terima_triage',{ascending:true});
+
   const box=$('#icpTriageTable'), summary=$('#icpTriageSummary'), status=$('#icpTriageStatus');
-  if(q.error){ if(box)box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`; if(status)status.textContent=q.error.message; return; }
+  if(q.error){
+    if(box) box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;
+    if(status) status.textContent=q.error.message;
+    return;
+  }
+
+  // ICP mesti melihat SEMUA rekod TRIAGE, termasuk mangsa yang sudah keluar.
   const rows=q.data||[];
-  const normGender=v=>{ const x=String(v||'').trim().toUpperCase(); if(x==='LELAKI')return 'LELAKI'; if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA'; return 'BELUM DIKENALPASTI'; };
-  if(box) box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:760px"><thead><tr><th style="width:80px">BIL</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><span class="adu-tag">${aduDot(m.tag_triage)} <span>${esc(m.tag_triage||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-note">${esc(m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa aktif di TRIAGE.</p>';
+
+  const normGender=v=>{
+    const x=String(v||'').trim().toUpperCase();
+    if(x==='LELAKI') return 'LELAKI';
+    if(x==='PEREMPUAN'||x==='WANITA') return 'WANITA';
+    return 'BELUM DIKENALPASTI';
+  };
+
+  const statusDestinasi=m=>{
+    const loc=String(m.status_lokasi||'DALAM_TRIAGE').trim().toUpperCase();
+    if(loc==='DALAM_TRIAGE') return 'DALAM TRIAGE';
+    if(loc==='ADU') return m.destinasi || 'AIR DISASTER UNIT (ADU)';
+    if(loc==='BHA') return m.destinasi || 'BODY HOLDING AREA (BHA)';
+    if(loc==='HOSPITAL') return m.destinasi || 'HOSPITAL';
+    return m.destinasi || m.status_lokasi || '-';
+  };
+
+  if(box) box.innerHTML=rows.length
+    ? `<div class="adu-wrap"><table class="adu-table" style="min-width:900px">
+        <thead><tr>
+          <th style="width:80px">BIL</th>
+          <th>JENIS WARNA KAD</th>
+          <th>JANTINA</th>
+          <th>STATUS / DESTINASI</th>
+          <th>CATATAN</th>
+        </tr></thead>
+        <tbody>${rows.map((m,i)=>`<tr>
+          <td class="adu-bil">${String(i+1).padStart(2,'0')}</td>
+          <td><span class="adu-tag">${aduDot(m.tag_triage)} <span>${esc(m.tag_triage||'-')}</span></span></td>
+          <td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td>
+          <td>${esc(statusDestinasi(m))}</td>
+          <td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`
+    : '<p class="muted">Tiada mangsa TRIAGE direkodkan.</p>';
+
   const countTag=t=>rows.filter(m=>String(m.tag_triage||'').toUpperCase()===t).length;
   const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
-  if(summary) summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid"><div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div><div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div><div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div><div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div><div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div><div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div><div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div><div class="adu-summary-item"><small>JUMLAH MANGSA AKTIF TRIAGE</small><strong>${rows.length}</strong></div></div></div>`;
-  if(status) status.textContent=`Status mangsa TRIAGE terkini. Jumlah mangsa aktif: ${rows.length}.`;
+  const countLoc=loc=>rows.filter(m=>String(m.status_lokasi||'').trim().toUpperCase()===loc).length;
+
+  if(summary) summary.innerHTML=`<div class="adu-summary">
+    <div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div>
+    <div class="adu-summary-grid">
+      <div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div>
+      <div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div>
+      <div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div>
+      <div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div>
+      <div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div>
+      <div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div>
+      <div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div>
+      <div class="adu-summary-item"><small>8. KE ADU</small><strong>${countLoc('ADU')}</strong></div>
+      <div class="adu-summary-item"><small>9. KE BHA</small><strong>${countLoc('BHA')}</strong></div>
+      <div class="adu-summary-item"><small>10. KE HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
+      <div class="adu-summary-item"><small>11. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
+    </div>
+  </div>`;
+
+  if(status) status.textContent=`Status mangsa TRIAGE terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
 // ===== TRIAGE FIX 023 =====
