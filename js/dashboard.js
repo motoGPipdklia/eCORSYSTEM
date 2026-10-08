@@ -139,6 +139,8 @@ async function loadAssignment() {
   await loadCommunication();
   await renderControlRoom();
   await renderAcccRoom();
+  await renderAduModule();
+  await renderCorAduStatus();
 }
 
 function disableReporting() {
@@ -670,4 +672,94 @@ async function loadAcccInbox() {
   box.querySelectorAll('[data-accc-reply]').forEach(b =>
     b.onclick = () => replyInstruction(rows.find(x => x.id === b.dataset.acccReply))
   );
+}
+
+// ===== ADU FASA 3 =====
+const ADU_TAGS=['PUTIH','MERAH','KUNING','HIJAU'];
+const aduLabel=t=>({PUTIH:'Putih — Meninggal Dunia',MERAH:'Merah — Cedera Parah',KUNING:'Kuning — Cedera Ringan',HIJAU:'Hijau — Tiada Kecederaan'})[t]||t;
+const aduDot=t=>({PUTIH:'⚪',MERAH:'🔴',KUNING:'🟡',HIJAU:'🟢'})[t]||'•';
+const isAduSupervisor=()=>assignment?.ecor_tempat_tugas?.kod==='ADU'&&String(assignment?.peranan||'').trim().toUpperCase()==='PENYELIA';
+const aduOptions=(s='')=>ADU_TAGS.map(t=>`<option value="${t}" ${t===s?'selected':''}>${aduLabel(t)}</option>`).join('');
+
+function ensureAduStyles(){
+ if($('#aduStyles'))return;
+ const x=document.createElement('style'); x.id='aduStyles';
+ x.textContent=`.adu-metrics{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:12px;margin:16px 0}.adu-metric{border:1px solid #244052;border-radius:12px;padding:14px;text-align:center}.adu-metric small{display:block;margin-bottom:6px}.adu-metric strong{font-size:1.7rem}.adu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.adu-grid .full{grid-column:1/-1}.adu-wrap{overflow-x:auto}.adu-table{width:100%;min-width:950px;border-collapse:collapse}.adu-table th,.adu-table td{padding:10px;border-bottom:1px solid #1b3444;text-align:left;vertical-align:top}.adu-actions{display:flex;gap:8px;flex-wrap:wrap}@media(max-width:800px){.adu-metrics{grid-template-columns:repeat(2,1fr)}.adu-grid{grid-template-columns:1fr}}`;
+ document.head.appendChild(x);
+}
+
+async function renderAduModule(){
+ $('#aduPanel')?.remove(); if(!isAduSupervisor())return; ensureAduStyles();
+ const p=document.createElement('section'); p.id='aduPanel'; p.className='panel';
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>ADU — Pengurusan Mangsa</h2><p class="muted">Tag TRIAGE asal dikekalkan. Tag ADU semasa digunakan untuk status terkini.</p></div><button id="aduRefresh" class="ghost">MUAT SEMULA</button></div>
+ <div class="adu-metrics">${['Putih','Merah','Kuning','Hijau','Jumlah'].map(x=>`<div class="adu-metric"><small>${x.toUpperCase()}</small><strong id="adu${x}">0</strong></div>`).join('')}</div>
+ <h3>Daftar Mangsa</h3><form id="aduVictimForm"><div class="adu-grid">
+ <label>No./ID Mangsa<input id="aduNo" required placeholder="Contoh: ADU-001"></label>
+ <label>Nama Mangsa<input id="aduNama" placeholder="BELUM DIKENAL PASTI"></label>
+ <label>No. KP / Pasport<input id="aduId"></label>
+ <label>Jantina<select id="aduJantina"><option value="">- PILIH -</option><option>LELAKI</option><option>PEREMPUAN</option><option>TIDAK DIKETAHUI</option></select></label>
+ <label>Warganegara<input id="aduNegara"></label>
+ <label>Tag TRIAGE Asal<select id="aduTriage">${aduOptions()}</select></label>
+ <label>Tag ADU Semasa<select id="aduSemasa">${aduOptions()}</select></label>
+ <label class="full">Catatan Penilaian<textarea id="aduCatatan"></textarea></label></div><button type="submit">DAFTAR MANGSA</button></form>
+ <p id="aduStatus" class="status"></p><h3>Senarai Mangsa ADU</h3><div id="aduList"></div><hr>
+ <h3>Hantar Laporan ADU ke COR</h3><label>Catatan Penyelia ADU<textarea id="aduReportNote"></textarea></label><button id="aduSendReport">HANTAR LAPORAN KE COR</button><p id="aduReportStatus" class="status"></p>`;
+ document.querySelector('main').appendChild(p);
+ $('#aduRefresh').onclick=loadAduData; $('#aduVictimForm').onsubmit=registerAduVictim; $('#aduSendReport').onclick=sendAduReport; await loadAduData();
+}
+
+async function loadAduData(){
+ if(!isAduSupervisor())return;
+ const [a,b]=await Promise.all([
+  supabase.from('ecor_adu_ringkasan').select('*').eq('operasi_id',assignment.operasi_id).maybeSingle(),
+  supabase.from('ecor_adu_mangsa').select('*').eq('operasi_id',assignment.operasi_id).order('masa_terima_adu',{ascending:false})
+ ]);
+ if(a.error){$('#aduStatus').textContent=a.error.message;return}
+ const r=a.data||{}; $('#aduPutih').textContent=r.putih||0; $('#aduMerah').textContent=r.merah||0; $('#aduKuning').textContent=r.kuning||0; $('#aduHijau').textContent=r.hijau||0; $('#aduJumlah').textContent=r.jumlah_mangsa||0;
+ const rows=b.data||[], box=$('#aduList'); if(b.error){box.innerHTML=`<p class="status">${esc(b.error.message)}</p>`;return}
+ box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>MASA TERIMA</th><th>TAG TRIAGE</th><th>TAG ADU SEMASA</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td>${esc(fmt(m.masa_terima_adu))}</td><td>${aduDot(m.tag_triage)} ${esc(m.tag_triage)}</td><td>${aduDot(m.tag_adu_semasa)} ${esc(m.tag_adu_semasa)}</td><td>${esc(m.catatan||'-')}</td><td><div class="adu-actions"><button class="ghost" data-up="${m.id}">KEMAS KINI TAG</button><button class="ghost" data-his="${m.id}">SEJARAH TAG</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa ADU direkodkan.</p>';
+ box.querySelectorAll('[data-up]').forEach(x=>x.onclick=()=>updateAduTag(rows.find(m=>m.id===x.dataset.up)));
+ box.querySelectorAll('[data-his]').forEach(x=>x.onclick=()=>showAduHistory(rows.find(m=>m.id===x.dataset.his)));
+}
+
+async function registerAduVictim(e){
+ e.preventDefault(); const s=$('#aduStatus'), tri=$('#aduTriage').value, cur=$('#aduSemasa').value; s.textContent='Menyimpan...';
+ const payload={operasi_id:assignment.operasi_id,no_mangsa:$('#aduNo').value.trim(),nama_mangsa:$('#aduNama').value.trim()||null,no_pengenalan:$('#aduId').value.trim()||null,jantina:$('#aduJantina').value||null,warganegara:$('#aduNegara').value.trim()||null,tag_triage:tri,tag_adu_semasa:cur,catatan:$('#aduCatatan').value.trim()||null,didaftarkan_oleh:session.user.id};
+ const q=await supabase.from('ecor_adu_mangsa').insert(payload).select('id').single(); if(q.error){s.textContent=q.error.message;return}
+ if(tri!==cur){const log=await supabase.from('ecor_adu_sejarah_tag').insert({mangsa_id:q.data.id,operasi_id:assignment.operasi_id,tag_sebelum:tri,tag_baharu:cur,catatan:payload.catatan,diubah_oleh:session.user.id}); if(log.error)console.warn(log.error.message)}
+ e.target.reset(); s.textContent='Mangsa berjaya didaftarkan.'; await loadAduData();
+}
+
+async function updateAduTag(m){
+ const v=prompt(`Tag ADU semasa: ${m.tag_adu_semasa}\nMasukkan tag baharu: PUTIH / MERAH / KUNING / HIJAU`,m.tag_adu_semasa); if(!v)return;
+ const t=v.trim().toUpperCase(); if(!ADU_TAGS.includes(t)){alert('Tag tidak sah.');return} if(t===m.tag_adu_semasa){alert('Tag tidak berubah.');return}
+ const note=prompt(`Catatan perubahan ${m.tag_adu_semasa} → ${t}:`)||'';
+ const q=await supabase.from('ecor_adu_mangsa').update({tag_adu_semasa:t,catatan:note.trim()||m.catatan||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);
+ if(q.error){alert(q.error.message);return} alert(`Tag berjaya dikemas kini: ${m.tag_adu_semasa} → ${t}`); await loadAduData();
+}
+
+async function showAduHistory(m){
+ const q=await supabase.from('ecor_adu_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');
+ if(q.error){alert(q.error.message);return}
+ alert(`SEJARAH TAG — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
+}
+
+async function sendAduReport(){
+ if(!confirm('Hantar laporan situasi mangsa ADU terkini kepada COR?'))return;
+ const s=$('#aduReportStatus'); s.textContent='Menghantar laporan...';
+ const q=await supabase.rpc('ecor_hantar_laporan_adu',{p_operasi_id:assignment.operasi_id,p_catatan:$('#aduReportNote').value.trim()||null});
+ if(q.error){s.textContent=q.error.message;return} $('#aduReportNote').value=''; s.textContent='Laporan ADU berjaya dihantar ke COR.'; await loadCommunication();
+}
+
+async function renderCorAduStatus(){
+ $('#corAduPanel')?.remove(); if(assignment?.ecor_tempat_tugas?.kod!=='COR')return; ensureAduStyles();
+ const p=document.createElement('section'); p.id='corAduPanel'; p.className='panel';
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>Status Mangsa ADU</h2><p class="muted">VIEW ONLY — berdasarkan Tag ADU semasa.</p></div><button id="corAduRefresh" class="ghost">MUAT SEMULA</button></div><div class="adu-metrics">${['Putih','Merah','Kuning','Hijau','Jumlah'].map(x=>`<div class="adu-metric"><small>${x.toUpperCase()}</small><strong id="corAdu${x}">0</strong></div>`).join('')}</div><p id="corAduStatus" class="status"></p>`;
+ ($('#controlRoomPanel')||document.querySelector('main')).insertAdjacentElement($('#controlRoomPanel')?'afterend':'beforeend',p); $('#corAduRefresh').onclick=loadCorAduStatus; await loadCorAduStatus();
+}
+
+async function loadCorAduStatus(){
+ const q=await supabase.from('ecor_adu_ringkasan').select('*').eq('operasi_id',assignment.operasi_id).maybeSingle();
+ if(q.error){$('#corAduStatus').textContent=q.error.message;return} const r=q.data||{};
+ $('#corAduPutih').textContent=r.putih||0; $('#corAduMerah').textContent=r.merah||0; $('#corAduKuning').textContent=r.kuning||0; $('#corAduHijau').textContent=r.hijau||0; $('#corAduJumlah').textContent=r.jumlah_mangsa||0; $('#corAduStatus').textContent='Status mangsa ADU terkini.';
 }
