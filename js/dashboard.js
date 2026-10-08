@@ -411,7 +411,7 @@ $('#logout').addEventListener('click', async () => {
   location.replace('index.html');
 });
 
-await boot();
+// boot() dipanggil di hujung fail selepas semua modul ADU diinisialisasi.
 
 
 async function renderControlRoom() {
@@ -678,7 +678,8 @@ async function loadAcccInbox() {
 const ADU_TAGS=['PUTIH','MERAH','KUNING','HIJAU'];
 const aduLabel=t=>({PUTIH:'Putih — Meninggal Dunia',MERAH:'Merah — Cedera Parah',KUNING:'Kuning — Cedera Ringan',HIJAU:'Hijau — Tiada Kecederaan'})[t]||t;
 const aduDot=t=>({PUTIH:'⚪',MERAH:'🔴',KUNING:'🟡',HIJAU:'🟢'})[t]||'•';
-const isAduSupervisor=()=>assignment?.ecor_tempat_tugas?.kod==='ADU'&&String(assignment?.peranan||'').trim().toUpperCase()==='PENYELIA';
+const isAduSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='ADU' &&
+  String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
 const aduOptions=(s='')=>ADU_TAGS.map(t=>`<option value="${t}" ${t===s?'selected':''}>${aduLabel(t)}</option>`).join('');
 
 function ensureAduStyles(){
@@ -763,3 +764,6 @@ async function loadCorAduStatus(){
  if(q.error){$('#corAduStatus').textContent=q.error.message;return} const r=q.data||{};
  $('#corAduPutih').textContent=r.putih||0; $('#corAduMerah').textContent=r.merah||0; $('#corAduKuning').textContent=r.kuning||0; $('#corAduHijau').textContent=r.hijau||0; $('#corAduJumlah').textContent=r.jumlah_mangsa||0; $('#corAduStatus').textContent='Status mangsa ADU terkini.';
 }
+
+// FIX 018: mula aplikasi hanya selepas semua const/fungsi modul ADU selesai diinisialisasi.
+await boot();
