@@ -752,11 +752,11 @@ async function loadIcpInbox() {
       </div>
       <h3>${esc(x.tajuk)}</h3>
       <p>${esc(x.kandungan)}</p>
-      <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
+      <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : (x.status === 'DIMAJUKAN' ? 'TELAH DIMAJUKAN KE COR' : x.status))}</div>
       <div class="message-actions">
         <button data-icp-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
         <button data-icp-reply="${x.id}">BALAS</button>
-        <button data-icp-forward="${x.id}">MAJU KE SALURAN ATASAN</button>
+        <button data-icp-forward="${x.id}" ${x.status === 'DIMAJUKAN' ? 'disabled' : ''}>${x.status === 'DIMAJUKAN' ? 'TELAH DIMAJUKAN' : 'MAJU KE SALURAN ATASAN'}</button>
       </div>
     </article>`).join('') : '<p class="muted">Tiada laporan daripada submodul ICP.</p>';
 
@@ -810,28 +810,28 @@ async function forwardIcpReport(source, button) {
     return;
   }
 
-  // Selepas berjaya dimajukan, tutup rekod asal di Peti Masuk ICP.
-  // Ini memastikan laporan yang sama tidak boleh dimajukan kali kedua.
-  const closed = await supabase
+  // FIX 021: Rekod asal KEKAL di Peti Masuk ICP selepas dimajukan.
+  // Status DIMAJUKAN digunakan untuk mengunci butang MAJU tanpa membuang mesej.
+  // Mesej hanya hilang daripada Peti Masuk apabila BALAS berjaya, kerana
+  // replyInstruction() akan menukar status asal kepada DITERIMA.
+  const marked = await supabase
     .from('ecor_komunikasi')
-    .update({ status: 'DITERIMA' })
+    .update({ status: 'DIMAJUKAN' })
     .eq('id', source.id)
     .eq('operasi_id', assignment.operasi_id)
     .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
     .select('id,status')
     .maybeSingle();
 
-  if (closed.error || !closed.data) {
-    // Laporan sudah sampai ke COR. Kekalkan butang terkunci supaya pengguna
-    // tidak menghantar salinan kedua dalam sesi semasa.
-    if (button) button.textContent = 'TELAH DIMAJUKAN';
-    alert(`Laporan telah dihantar ke COR, tetapi rekod asal ICP gagal ditutup. ${closed.error?.message || 'Semak polisi RLS UPDATE ecor_komunikasi.'}`);
+  if (marked.error || !marked.data) {
+    if (button) { button.disabled = true; button.textContent = 'TELAH DIMAJUKAN'; }
+    alert(`Laporan telah dihantar ke COR, tetapi status DIMAJUKAN gagal disimpan. ${marked.error?.message || 'Semak polisi RLS UPDATE ecor_komunikasi.'}`);
     await loadCommunication();
     return;
   }
 
-  if (button) button.textContent = 'TELAH DIMAJUKAN';
-  alert('Laporan berjaya dimajukan dari ICP ke COR.');
+  if (button) { button.disabled = true; button.textContent = 'TELAH DIMAJUKAN'; }
+  alert('Laporan berjaya dimajukan dari ICP ke COR. Laporan kekal dalam Peti Masuk sehingga dibalas.');
   await loadIcpInbox();
   await loadCommunication();
 }
