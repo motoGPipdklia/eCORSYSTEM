@@ -115,6 +115,7 @@ async function loadAssignment() {
 
   $('#status').textContent = 'Penugasan aktif dimuatkan.';
   await loadCommunication();
+  await renderControlRoom();
 }
 
 function disableReporting() {
@@ -145,7 +146,11 @@ async function loadCommunication() {
     return;
   }
 
-  const rows = data || [];
+  const allRows = data || [];
+  const rows = allRows.filter(x =>
+    x.dari_tempat_tugas_id === assignment.tempat_tugas_id ||
+    x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
+  );
   const instructions = rows.filter(x =>
     x.jenis === 'ARAHAN' &&
     x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
@@ -232,3 +237,116 @@ $('#logout').addEventListener('click', async () => {
 });
 
 await boot();
+
+
+async function renderControlRoom() {
+  const old = document.querySelector('#controlRoomPanel');
+  if (old) old.remove();
+
+  const code = assignment?.ecor_tempat_tugas?.kod;
+  if (code !== 'COR') return;
+
+  const panel = document.createElement('section');
+  panel.id = 'controlRoomPanel';
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="section-head">
+      <div><p class="eyebrow">CONTROL ROOM</p><h2>COR — Pusat Pengumpulan Maklumat</h2></div>
+      <button id="refreshInbox" class="ghost">MUAT SEMULA</button>
+    </div>
+    <div class="cor-metrics">
+      <div><small>LAPORAN MASUK</small><strong id="corTotal">0</strong></div>
+      <div><small>BELUM DIBACA</small><strong id="corNew">0</strong></div>
+      <div><small>KRITIKAL</small><strong id="corCritical">0</strong></div>
+      <div><small>DALAM TINDAKAN</small><strong id="corAction">0</strong></div>
+    </div>
+    <h3>Peti Masuk COR</h3>
+    <div id="corInbox" class="message-list"><p class="muted">Memuatkan laporan...</p></div>
+    <hr>
+    <h3>Laporan COR kepada ACCC</h3>
+    <p class="muted">COR boleh merumuskan maklumat yang diterima dan menghantar laporan satu aras ke ACCC.</p>
+    <button id="corToAccc">SEDIA LAPORAN KE ACCC</button>
+  `;
+  document.querySelector('main').appendChild(panel);
+  document.querySelector('#refreshInbox').onclick = loadCorInbox;
+  document.querySelector('#corToAccc').onclick = () => {
+    document.querySelector('#openReport').click();
+  };
+  await loadCorInbox();
+}
+
+async function loadCorInbox() {
+  if (assignment?.ecor_tempat_tugas?.kod !== 'COR') return;
+  const { data, error } = await supabase
+    .from('ecor_komunikasi')
+    .select(`
+      id,jenis,tajuk,kandungan,keutamaan,status,created_at,pengirim_id,
+      dari_tempat_tugas_id,kepada_tempat_tugas_id,
+      dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
+      kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
+    `)
+    .eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
+    .eq('jenis', 'LAPORAN')
+    .order('created_at', { ascending:false });
+
+  const box=document.querySelector('#corInbox');
+  if (error) { box.innerHTML=`<p class="status">${esc(error.message)}</p>`; return; }
+  const rows=data||[];
+  document.querySelector('#corTotal').textContent=rows.length;
+  document.querySelector('#corNew').textContent=rows.filter(x=>x.status==='DIHANTAR'||x.status==='BARU').length;
+  document.querySelector('#corCritical').textContent=rows.filter(x=>x.keutamaan==='KRITIKAL').length;
+  document.querySelector('#corAction').textContent=rows.filter(x=>x.status==='DALAM TINDAKAN').length;
+
+  box.innerHTML=rows.length ? rows.map(x=>`
+    <article class="message">
+      <div class="message-head">
+        <span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span>
+        <b>${esc(x.dari?.kod||'-')} → COR</b>
+        <small>${esc(fmt(x.created_at))}</small>
+      </div>
+      <h3>${esc(x.tajuk)}</h3>
+      <p>${esc(x.kandungan)}</p>
+      <div class="message-route">STATUS: ${esc(x.status)}</div>
+      <div class="message-actions">
+        <button data-read="${x.id}" class="ghost">TANDA DIBACA</button>
+        <button data-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
+        <button data-reply="${x.id}">HANTAR ARAHAN</button>
+      </div>
+    </article>`).join('') : '<p class="muted">Tiada laporan diterima.</p>';
+
+  box.querySelectorAll('[data-read]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.read,'DIBACA'));
+  box.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.action,'DALAM TINDAKAN'));
+  box.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.reply)));
+}
+
+async function setMessageStatus(id,status) {
+  const { error }=await supabase.from('ecor_komunikasi').update({status}).eq('id',id);
+  if (error) { alert(error.message); return; }
+  await loadCorInbox();
+  await loadCommunication();
+}
+
+async function replyInstruction(source) {
+  if (!source?.dari_tempat_tugas_id) return;
+  const title=prompt(`Tajuk arahan kepada ${source.dari?.kod||'tempat tugas'}:`);
+  if (!title) return;
+  const body=prompt('Kandungan arahan:');
+  if (!body) return;
+
+  const { error }=await supabase.from('ecor_komunikasi').insert({
+    operasi_id: assignment.operasi_id,
+    pengirim_id: session.user.id,
+    dari_tempat_tugas_id: assignment.tempat_tugas_id,
+    kepada_tempat_tugas_id: source.dari_tempat_tugas_id,
+    jenis:'ARAHAN',
+    tajuk:title.trim(),
+    kandungan:body.trim(),
+    keutamaan:source.keutamaan || 'BIASA',
+    status:'DIHANTAR'
+  });
+  if (error) { alert(error.message); return; }
+  alert(`Arahan berjaya dihantar kepada ${source.dari?.kod||'tempat tugas'}.`);
+  await loadCorInbox();
+  await loadCommunication();
+}
