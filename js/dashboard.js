@@ -191,6 +191,14 @@ async function loadCommunication() {
 }
 
 function messageCard(m) {
+  const currentCode = assignment?.ecor_tempat_tugas?.kod;
+  const isCorSentToAccc = currentCode === 'COR' && m.dari?.kod === 'COR' && m.kepada?.kod === 'ACCC';
+  const statusText = isCorSentToAccc && m.status === 'DIBACA'
+    ? 'DIBACA OLEH ACCC'
+    : isCorSentToAccc && m.status === 'DALAM TINDAKAN'
+      ? 'DALAM TINDAKAN OLEH ACCC'
+      : m.status;
+
   return `<article class="message">
     <div class="message-head">
       <span class="badge ${esc(m.keutamaan)}">${esc(m.keutamaan)}</span>
@@ -201,7 +209,7 @@ function messageCard(m) {
     <p>${esc(m.kandungan)}</p>
     <div class="message-route">
       ${esc(m.dari?.kod || '-')} → ${esc(m.kepada?.kod || '-')}
-      • ${esc(m.status)}
+      • ${esc(statusText)}
     </div>
   </article>`;
 }
@@ -353,9 +361,32 @@ async function loadCorInbox() {
   box.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.reply)));
 }
 
-async function setMessageStatus(id,status) {
-  const { error }=await supabase.from('ecor_komunikasi').update({status}).eq('id',id);
-  if (error) { alert(error.message); return; }
+async function setMessageStatus(id, status) {
+  // Penting: .select() digunakan supaya kita boleh kesan jika RLS menyebabkan
+  // UPDATE tidak mengubah sebarang rekod walaupun Supabase tidak memulangkan error.
+  const { data, error } = await supabase
+    .from('ecor_komunikasi')
+    .update({ status })
+    .eq('id', id)
+    .eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
+    .select('id,status,dari_tempat_tugas_id,kepada_tempat_tugas_id')
+    .maybeSingle();
+
+  if (error) {
+    alert(`Gagal mengubah status: ${error.message}`);
+    return;
+  }
+
+  if (!data) {
+    alert('Status tidak berubah. Polisi RLS Supabase belum membenarkan penerima mengemas kini mesej ini. Jalankan fail SQL yang disertakan.');
+    return;
+  }
+
+  // Beri maklum balas terus kepada ACCC/COR selepas butang ditekan.
+  const label = status === 'DIBACA' ? 'TANDA DIBACA' : status;
+  alert(`Status berjaya dikemas kini: ${label}`);
+
   if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   await loadCommunication();
