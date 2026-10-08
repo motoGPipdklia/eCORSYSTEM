@@ -685,7 +685,7 @@ const aduOptions=(s='')=>ADU_TAGS.map(t=>`<option value="${t}" ${t===s?'selected
 function ensureAduStyles(){
  if($('#aduStyles'))return;
  const x=document.createElement('style'); x.id='aduStyles';
- x.textContent=`.adu-metrics{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:12px;margin:16px 0}.adu-metric{border:1px solid #244052;border-radius:12px;padding:14px;text-align:center}.adu-metric small{display:block;margin-bottom:6px}.adu-metric strong{font-size:1.7rem}.adu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.adu-grid .full{grid-column:1/-1}.adu-wrap{overflow-x:auto;border:1px solid #244052;border-radius:14px;background:rgba(4,20,31,.35)}.adu-table{width:100%;min-width:950px;border-collapse:separate;border-spacing:0}.adu-table th{padding:14px 16px;background:#0d2635;color:#62e0bd;font-size:.78rem;letter-spacing:.05em;text-align:left;border-bottom:1px solid #2b4a5d}.adu-table td{padding:14px 16px;border-bottom:1px solid #183646;text-align:left;vertical-align:middle}.adu-table tbody tr:last-child td{border-bottom:0}.adu-table tbody tr:nth-child(even){background:rgba(255,255,255,.018)}.adu-table tbody tr:hover{background:rgba(98,224,189,.055)}.adu-bil{font-weight:800;color:#dce9f3}.adu-tag{display:inline-flex;align-items:center;gap:8px;min-width:108px;padding:6px 10px;border:1px solid #29485a;border-radius:999px;background:#0a1c28;font-weight:800}.adu-gender{display:inline-flex;padding:5px 10px;border-radius:8px;background:#102838;border:1px solid #24495d;font-weight:700}.adu-note{color:#c6d5df}.adu-summary{margin-top:22px;border:1px solid #244052;border-radius:14px;overflow:hidden;background:rgba(4,20,31,.35)}.adu-summary-title{padding:14px 16px;background:#0d2635;border-bottom:1px solid #2b4a5d}.adu-summary-title h3{margin:0}.adu-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:0}.adu-summary-item{padding:16px;border-right:1px solid #183646;border-bottom:1px solid #183646}.adu-summary-item:nth-child(4n){border-right:0}.adu-summary-item small{display:block;color:#9fb7c7;margin-bottom:5px;font-size:.74rem}.adu-summary-item strong{font-size:1.35rem}.adu-summary-item.gender strong{font-size:1.15rem}.adu-actions{display:flex;gap:8px;flex-wrap:wrap}@media(max-width:900px){.adu-summary-grid{grid-template-columns:repeat(2,1fr)}.adu-summary-item:nth-child(4n){border-right:1px solid #183646}.adu-summary-item:nth-child(2n){border-right:0}}@media(max-width:800px){.adu-metrics{grid-template-columns:repeat(2,1fr)}.adu-grid{grid-template-columns:1fr}.adu-table{min-width:720px}}@media(max-width:520px){.adu-summary-grid{grid-template-columns:1fr}.adu-summary-item{border-right:0!important}}`;
+ x.textContent=`.adu-metrics{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:12px;margin:16px 0}.adu-metric{border:1px solid #244052;border-radius:12px;padding:14px;text-align:center}.adu-metric small{display:block;margin-bottom:6px}.adu-metric strong{font-size:1.7rem}.adu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.adu-grid .full{grid-column:1/-1}.adu-wrap{overflow-x:auto;border:1px solid #244052;border-radius:14px;background:rgba(4,20,31,.35)}.adu-table{width:100%;min-width:950px;border-collapse:separate;border-spacing:0}.adu-table th{padding:14px 16px;background:#0d2635;color:#62e0bd;font-size:.78rem;letter-spacing:.05em;text-align:left;border-bottom:1px solid #2b4a5d}.adu-table td{padding:14px 16px;border-bottom:1px solid #183646;text-align:left;vertical-align:middle}.adu-table tbody tr:last-child td{border-bottom:0}.adu-table tbody tr:nth-child(even){background:rgba(255,255,255,.018)}.adu-table tbody tr:hover{background:rgba(98,224,189,.055)}.adu-bil{font-weight:800;color:#dce9f3}.adu-tag{display:inline-flex;align-items:center;gap:8px;min-width:108px;padding:6px 10px;border:1px solid #29485a;border-radius:999px;background:#0a1c28;font-weight:800}.adu-gender{display:inline-flex;padding:5px 10px;border-radius:8px;background:#102838;border:1px solid #24495d;font-weight:700}.adu-note{color:#c6d5df}.adu-summary{margin-top:22px;border:1px solid #244052;border-radius:14px;overflow:hidden;background:rgba(4,20,31,.35)}.adu-summary-title{padding:14px 16px;background:#0d2635;border-bottom:1px solid #2b4a5d}.adu-summary-title h3{margin:0}.adu-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:0}.adu-summary-item{padding:16px;border-right:1px solid #183646;border-bottom:1px solid #183646}.adu-summary-item:nth-child(4n){border-right:0}.adu-summary-item small{display:block;color:#9fb7c7;margin-bottom:5px;font-size:.74rem}.adu-summary-item strong{font-size:1.35rem}.adu-summary-item.gender strong{font-size:1.15rem}.adu-actions{display:flex;gap:8px;flex-wrap:wrap}.adu-transfer{margin-top:16px;padding:16px;border:1px solid #183646;border-radius:14px}.adu-destination{font-weight:800}.adu-status-active{color:#5ee0b5}.adu-status-out{color:#f2c66d}@media(max-width:900px){.adu-summary-grid{grid-template-columns:repeat(2,1fr)}.adu-summary-item:nth-child(4n){border-right:1px solid #183646}.adu-summary-item:nth-child(2n){border-right:0}}@media(max-width:800px){.adu-metrics{grid-template-columns:repeat(2,1fr)}.adu-grid{grid-template-columns:1fr}.adu-table{min-width:720px}}@media(max-width:520px){.adu-summary-grid{grid-template-columns:1fr}.adu-summary-item{border-right:0!important}}`;
  document.head.appendChild(x);
 }
 
@@ -703,7 +703,8 @@ async function renderAduModule(){
  <label>Tag TRIAGE Asal<select id="aduTriage">${aduOptions()}</select></label>
  <label>Tag ADU Semasa<select id="aduSemasa">${aduOptions()}</select></label>
  <label class="full">Catatan Penilaian<textarea id="aduCatatan"></textarea></label></div><button type="submit">DAFTAR MANGSA</button></form>
- <p id="aduStatus" class="status"></p><h3>Senarai Mangsa ADU</h3><div id="aduList"></div><hr>
+ <p id="aduStatus" class="status"></p><h3>Senarai Mangsa Aktif ADU</h3><div id="aduList"></div>
+ <div class="adu-transfer"><h3>Rekod Keluar ADU</h3><div id="aduTransferList"><p class="muted">Tiada rekod pemindahan.</p></div></div><hr>
  <h3>Hantar Laporan ADU ke COR</h3><label>Catatan Penyelia ADU<textarea id="aduReportNote"></textarea></label><button id="aduSendReport">HANTAR LAPORAN KE COR</button><p id="aduReportStatus" class="status"></p>`;
  document.querySelector('main').appendChild(p);
  $('#aduRefresh').onclick=loadAduData; $('#aduVictimForm').onsubmit=registerAduVictim; $('#aduSendReport').onclick=sendAduReport; await loadAduData();
@@ -711,21 +712,22 @@ async function renderAduModule(){
 
 async function loadAduData(){
  if(!isAduSupervisor())return;
- const [a,b]=await Promise.all([
-  supabase.from('ecor_adu_ringkasan').select('*').eq('operasi_id',assignment.operasi_id).maybeSingle(),
-  supabase.from('ecor_adu_mangsa').select('*').eq('operasi_id',assignment.operasi_id).order('masa_terima_adu',{ascending:false})
- ]);
- if(a.error){$('#aduStatus').textContent=a.error.message;return}
- const r=a.data||{}; $('#aduPutih').textContent=r.putih||0; $('#aduMerah').textContent=r.merah||0; $('#aduKuning').textContent=r.kuning||0; $('#aduHijau').textContent=r.hijau||0; $('#aduJumlah').textContent=r.jumlah_mangsa||0;
- const rows=b.data||[], box=$('#aduList'); if(b.error){box.innerHTML=`<p class="status">${esc(b.error.message)}</p>`;return}
- box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>MASA TERIMA</th><th>TAG TRIAGE</th><th>TAG ADU SEMASA</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td>${esc(fmt(m.masa_terima_adu))}</td><td>${aduDot(m.tag_triage)} ${esc(m.tag_triage)}</td><td>${aduDot(m.tag_adu_semasa)} ${esc(m.tag_adu_semasa)}</td><td>${esc(m.catatan||'-')}</td><td><div class="adu-actions"><button class="ghost" data-up="${m.id}">KEMAS KINI TAG</button><button class="ghost" data-his="${m.id}">SEJARAH TAG</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa ADU direkodkan.</p>';
- box.querySelectorAll('[data-up]').forEach(x=>x.onclick=()=>updateAduTag(rows.find(m=>m.id===x.dataset.up)));
- box.querySelectorAll('[data-his]').forEach(x=>x.onclick=()=>showAduHistory(rows.find(m=>m.id===x.dataset.his)));
+ const b=await supabase.from('ecor_adu_mangsa').select('*').eq('operasi_id',assignment.operasi_id).order('masa_terima_adu',{ascending:false});
+ const rows=b.data||[], box=$('#aduList'), transfer=$('#aduTransferList');
+ if(b.error){box.innerHTML=`<p class="status">${esc(b.error.message)}</p>`;return}
+ const active=rows.filter(m=>String(m.status_lokasi||'DALAM_ADU').toUpperCase()==='DALAM_ADU');
+ const moved=rows.filter(m=>String(m.status_lokasi||'DALAM_ADU').toUpperCase()!=='DALAM_ADU');
+ const count=t=>active.filter(m=>String(m.tag_adu_semasa||'').toUpperCase()===t).length;
+ $('#aduPutih').textContent=count('PUTIH'); $('#aduMerah').textContent=count('MERAH'); $('#aduKuning').textContent=count('KUNING'); $('#aduHijau').textContent=count('HIJAU'); $('#aduJumlah').textContent=active.length;
+ box.innerHTML=active.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>MASA TERIMA</th><th>TAG TRIAGE</th><th>TAG ADU SEMASA</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${active.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td>${esc(fmt(m.masa_terima_adu))}</td><td>${aduDot(m.tag_triage)} ${esc(m.tag_triage)}</td><td>${aduDot(m.tag_adu_semasa)} ${esc(m.tag_adu_semasa)}</td><td>${esc(m.catatan||'-')}</td><td><div class="adu-actions"><button class="ghost" data-up="${m.id}">KEMAS KINI TAG</button><button class="ghost" data-move="${m.id}">PINDAH / KELUAR ADU</button><button class="ghost" data-his="${m.id}">SEJARAH TAG</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa aktif di ADU.</p>';
+ if(transfer) transfer.innerHTML=moved.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>TAG AKHIR</th><th>DESTINASI</th><th>MASA KELUAR</th><th>CATATAN</th></tr></thead><tbody>${moved.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${aduDot(m.tag_adu_semasa)} ${esc(m.tag_adu_semasa||'-')}</td><td class="adu-destination">${esc(m.destinasi||m.status_lokasi||'-')}</td><td>${esc(fmt(m.masa_keluar_adu))}</td><td>${esc(m.catatan_pemindahan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada rekod pemindahan.</p>';
+ box.querySelectorAll('[data-up]').forEach(x=>x.onclick=()=>updateAduTag(active.find(m=>m.id===x.dataset.up)));
+ box.querySelectorAll('[data-move]').forEach(x=>x.onclick=()=>transferAduVictim(active.find(m=>m.id===x.dataset.move)));
+ box.querySelectorAll('[data-his]').forEach(x=>x.onclick=()=>showAduHistory(active.find(m=>m.id===x.dataset.his)));
 }
-
 async function registerAduVictim(e){
  e.preventDefault(); const s=$('#aduStatus'), tri=$('#aduTriage').value, cur=$('#aduSemasa').value; s.textContent='Menyimpan...';
- const payload={operasi_id:assignment.operasi_id,no_mangsa:$('#aduNo').value.trim(),nama_mangsa:$('#aduNama').value.trim()||null,no_pengenalan:$('#aduId').value.trim()||null,jantina:$('#aduJantina').value||null,warganegara:$('#aduNegara').value.trim()||null,tag_triage:tri,tag_adu_semasa:cur,catatan:$('#aduCatatan').value.trim()||null,didaftarkan_oleh:session.user.id};
+ const payload={operasi_id:assignment.operasi_id,no_mangsa:$('#aduNo').value.trim(),nama_mangsa:$('#aduNama').value.trim()||null,no_pengenalan:$('#aduId').value.trim()||null,jantina:$('#aduJantina').value||null,warganegara:$('#aduNegara').value.trim()||null,tag_triage:tri,tag_adu_semasa:cur,catatan:$('#aduCatatan').value.trim()||null,didaftarkan_oleh:session.user.id,status_lokasi:'DALAM_ADU',destinasi:null,masa_keluar_adu:null,catatan_pemindahan:null};
  const q=await supabase.from('ecor_adu_mangsa').insert(payload).select('id').single(); if(q.error){s.textContent=q.error.message;return}
  if(tri!==cur){const log=await supabase.from('ecor_adu_sejarah_tag').insert({mangsa_id:q.data.id,operasi_id:assignment.operasi_id,tag_sebelum:tri,tag_baharu:cur,catatan:payload.catatan,diubah_oleh:session.user.id}); if(log.error)console.warn(log.error.message)}
  e.target.reset(); s.textContent='Mangsa berjaya didaftarkan.'; await loadAduData();
@@ -736,9 +738,37 @@ async function updateAduTag(m){
  const t=v.trim().toUpperCase(); if(!ADU_TAGS.includes(t)){alert('Tag tidak sah.');return} if(t===m.tag_adu_semasa){alert('Tag tidak berubah.');return}
  const note=prompt(`Catatan perubahan ${m.tag_adu_semasa} → ${t}:`)||'';
  const q=await supabase.from('ecor_adu_mangsa').update({tag_adu_semasa:t,catatan:note.trim()||m.catatan||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);
- if(q.error){alert(q.error.message);return} alert(`Tag berjaya dikemas kini: ${m.tag_adu_semasa} → ${t}`); await loadAduData();
+ if(q.error){alert(q.error.message);return}
+ const log=await supabase.from('ecor_adu_sejarah_tag').insert({mangsa_id:m.id,operasi_id:assignment.operasi_id,tag_sebelum:m.tag_adu_semasa,tag_baharu:t,catatan:note.trim()||null,diubah_oleh:session.user.id});
+ if(log.error)console.warn(log.error.message);
+ if(t==='PUTIH' && confirm('Mangsa telah ditag PUTIH (meninggal dunia). Hantar keluar dari ADU ke BODY HOLDING AREA (BHA) sekarang?')){
+   await moveAduVictim(m,'BHA','BODY HOLDING AREA (BHA)',note);
+   return;
+ }
+ alert(`Tag berjaya dikemas kini: ${m.tag_adu_semasa} → ${t}`); await loadAduData();
 }
 
+async function transferAduVictim(m){
+ const raw=prompt('Destinasi keluar ADU:\n1 = BODY HOLDING AREA (BHA)\n2 = HOSPITAL','2'); if(!raw)return;
+ if(raw.trim()==='1'){
+   if(String(m.tag_adu_semasa||'').toUpperCase()!=='PUTIH' && !confirm('Tag semasa bukan PUTIH. Teruskan pemindahan ke BHA?'))return;
+   const note=prompt('Catatan pemindahan ke BHA:')||'';
+   await moveAduVictim(m,'BHA','BODY HOLDING AREA (BHA)',note); return;
+ }
+ if(raw.trim()==='2'){
+   const hospital=prompt('Masukkan nama hospital berdekatan:'); if(!hospital?.trim())return;
+   const note=prompt(`Catatan pemindahan ke ${hospital.trim()}:`)||'';
+   await moveAduVictim(m,'HOSPITAL',hospital.trim(),note); return;
+ }
+ alert('Pilihan tidak sah.');
+}
+
+async function moveAduVictim(m,statusLokasi,destinasi,note=''){
+ if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari ADU ke ${destinasi}?`))return;
+ const q=await supabase.from('ecor_adu_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_adu:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);
+ if(q.error){alert(q.error.message);return}
+ alert(`Mangsa berjaya dikeluarkan dari ADU ke ${destinasi}.`); await loadAduData();
+}
 async function showAduHistory(m){
  const q=await supabase.from('ecor_adu_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');
  if(q.error){alert(q.error.message);return}
@@ -766,7 +796,7 @@ async function renderCorAduStatus(){
 
 async function loadCorAduStatus(){
  const q=await supabase.from('ecor_adu_mangsa')
-   .select('id,no_mangsa,nama_mangsa,jantina,tag_adu_semasa,catatan,masa_terima_adu')
+   .select('id,no_mangsa,nama_mangsa,jantina,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
    .eq('operasi_id',assignment.operasi_id)
    .order('masa_terima_adu',{ascending:true});
  const box=$('#corAduTable'), summary=$('#corAduSummary'), status=$('#corAduStatus');
@@ -778,10 +808,10 @@ async function loadCorAduStatus(){
    if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA';
    return 'BELUM DIKENALPASTI';
  };
- if(box) box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:760px"><thead><tr><th style="width:80px">BIL</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><span class="adu-tag">${aduDot(m.tag_adu_semasa)} <span>${esc(m.tag_adu_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-note">${esc(m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa ADU direkodkan.</p>';
+ if(box) box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:760px"><thead><tr><th style="width:80px">BIL</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><span class="adu-tag">${aduDot(m.tag_adu_semasa)} <span>${esc(m.tag_adu_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td>${esc(String(m.status_lokasi||'DALAM_ADU')==='DALAM_ADU'?'DALAM ADU':(m.destinasi||m.status_lokasi))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa ADU direkodkan.</p>';
  const countTag=t=>rows.filter(m=>String(m.tag_adu_semasa||'').toUpperCase()===t).length;
  const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
- if(summary) summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid"><div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div><div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div><div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div><div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div><div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div><div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div><div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div><div class="adu-summary-item"><small>JUMLAH MANGSA</small><strong>${rows.length}</strong></div></div></div>`;
+ if(summary) summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid"><div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div><div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div><div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div><div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div><div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div><div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div><div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div><div class="adu-summary-item"><small>8. KE BHA</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="BHA").length}</strong></div><div class="adu-summary-item"><small>9. KE HOSPITAL</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="HOSPITAL").length}</strong></div><div class="adu-summary-item"><small>JUMLAH MANGSA</small><strong>${rows.length}</strong></div></div></div>`;
  if(status)status.textContent=`Status mangsa ADU terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
