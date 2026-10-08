@@ -9,6 +9,26 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({
 
 const fmt = (v) => v ? new Date(v).toLocaleString('ms-MY') : '-';
 
+function setReportModeForCurrentRoute() {
+  if (!assignment || !parentPlace) return;
+
+  const fromCode = assignment.ecor_tempat_tugas?.kod || '-';
+  const toCode = parentPlace.kod || '-';
+  const isCorToAccc = fromCode === 'COR' && toCode === 'ACCC';
+
+  $('#routeFrom').textContent = `${fromCode} — ${assignment.ecor_tempat_tugas?.nama || '-'}`;
+  $('#routeTo').textContent = `${toCode} — ${parentPlace.nama || '-'}`;
+
+  const form = $('#reportForm');
+  if (form) form.dataset.routeMode = isCorToAccc ? 'COR_ACCC' : 'NORMAL';
+
+  const submit = form?.querySelector('button[type="submit"]');
+  if (submit) submit.textContent = isCorToAccc ? 'HANTAR LAPORAN KE ACCC' : 'HANTAR LAPORAN';
+
+  const heading = $('#reportPanel h2');
+  if (heading) heading.textContent = isCorToAccc ? 'Laporan COR → ACCC' : 'Hantar Laporan';
+}
+
 async function boot() {
   const s = await supabase.auth.getSession();
   session = s.data.session;
@@ -105,6 +125,7 @@ async function loadAssignment() {
     $('#routeFrom').textContent = `${place.kod} — ${place.nama}`;
     $('#routeTo').textContent = `${parentPlace.kod} — ${parentPlace.nama}`;
     $('#openReport').disabled = false;
+    setReportModeForCurrentRoute();
   } else {
     $('#parentCode').textContent = '-';
     $('#parentName').textContent = 'Tiada tempat tugas induk';
@@ -186,6 +207,7 @@ function messageCard(m) {
 
 $('#openReport').addEventListener('click', () => {
   if (!assignment || !parentPlace) return;
+  setReportModeForCurrentRoute();
   $('#reportPanel').classList.remove('hidden');
   $('#reportPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -224,7 +246,10 @@ $('#reportForm').addEventListener('submit', async (e) => {
     return;
   }
 
-  s.textContent = `Laporan berjaya dihantar kepada ${parentPlace.kod}.`;
+  const isCorToAccc = assignment.ecor_tempat_tugas?.kod === 'COR' && parentPlace.kod === 'ACCC';
+  s.textContent = isCorToAccc
+    ? 'Laporan COR berjaya dihantar kepada ACCC.'
+    : `Laporan berjaya dihantar kepada ${parentPlace.kod}.`;
   e.target.reset();
   await loadCommunication();
 });
@@ -270,7 +295,14 @@ async function renderControlRoom() {
   document.querySelector('main').appendChild(panel);
   document.querySelector('#refreshInbox').onclick = loadCorInbox;
   document.querySelector('#corToAccc').onclick = () => {
-    document.querySelector('#openReport').click();
+    if (!parentPlace || parentPlace.kod !== 'ACCC') {
+      alert('Saluran COR → ACCC tidak tersedia. Semak parent tempat tugas COR.');
+      return;
+    }
+    setReportModeForCurrentRoute();
+    $('#reportPanel').classList.remove('hidden');
+    $('#reportPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('#reportTitle')?.focus();
   };
   await loadCorInbox();
 }
