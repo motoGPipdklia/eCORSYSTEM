@@ -975,22 +975,35 @@ async function renderCorAduStatus(){
   <div id="corAduTable"><p class="muted">Tekan MANGSA KESELURUHAN untuk memaparkan data.</p></div>
   <div id="corAduSummary"></div>
   <p id="corAduStatus" class="status"></p>`;
-  ($('#controlRoomPanel')||document.querySelector('main')).insertAdjacentElement($('#controlRoomPanel')?'afterend':'beforeend',p);
+  // FIX 028: Paparan Mangsa Keseluruhan diletakkan DI DALAM ruangan Carta Operasi.
+  const chartHeading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  const chartPanel=chartHeading?.closest('section');
+  const chartPlaceholder=chartPanel?.querySelector('p.muted');
+
+  if(chartPanel){
+    p.className='';
+    p.style.marginTop='18px';
+    chartPanel.appendChild(p);
+  }else{
+    document.querySelector('main').appendChild(p);
+  }
 
   let loaded=false;
   const closePanel=()=>{
     p.hidden=true;
     p.style.setProperty('display','none','important');
+    if(chartPlaceholder) chartPlaceholder.style.display='';
     const b=$('#corVictimToggle');
     if(b){b.setAttribute('aria-expanded','false'); b.textContent='MANGSA KESELURUHAN';}
   };
   const openPanel=async()=>{
     p.hidden=false;
     p.style.removeProperty('display');
+    if(chartPlaceholder) chartPlaceholder.style.display='none';
     const b=$('#corVictimToggle');
     if(b){b.setAttribute('aria-expanded','true'); b.textContent='TUTUP MANGSA KESELURUHAN';}
     if(!loaded){loaded=true; await loadCorAduStatus();}
-    p.scrollIntoView({behavior:'smooth',block:'start'});
+    (chartPanel||p).scrollIntoView({behavior:'smooth',block:'start'});
   };
 
   $('#corVictimToggle').onclick=()=>p.hidden?openPanel():closePanel();
