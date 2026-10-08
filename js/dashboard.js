@@ -241,8 +241,102 @@ async function loadCommunication() {
 
 
 function renderChronology(items) {
+  const isCor = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() === 'COR';
   let panel = document.querySelector('#chronologyPanel');
 
+  if (isCor) {
+    // FIX 029: KRONOLOGI COR berada di dalam CARTA OPERASI dan tertutup secara default.
+    const logoutBtn = $('#logout');
+    let btn = $('#corChronologyToggle');
+    if (!btn && logoutBtn) {
+      btn = document.createElement('button');
+      btn.id = 'corChronologyToggle';
+      btn.type = 'button';
+      btn.className = 'ghost';
+      btn.textContent = 'KRONOLOGI';
+      btn.setAttribute('aria-expanded', 'false');
+      logoutBtn.insertAdjacentElement('beforebegin', btn);
+    }
+
+    const chartHeading = [...document.querySelectorAll('h2')]
+      .find(x => x.textContent.trim().toUpperCase() === 'CARTA OPERASI');
+    const chartPanel = chartHeading?.closest('section');
+
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'chronologyPanel';
+      panel.innerHTML = `
+        <div class="section-head">
+          <div><p class="eyebrow">KRONOLOGI</p><h2>Kronologi Operasi</h2></div>
+          <button id="corChronologyClose" type="button" class="ghost">TUTUP</button>
+        </div>
+        <div id="chronologyList" class="message-list">
+          <p class="muted">Tiada laporan atau arahan diterima.</p>
+        </div>`;
+      if (chartPanel) {
+        panel.style.marginTop = '18px';
+        chartPanel.appendChild(panel);
+      } else {
+        document.querySelector('main')?.appendChild(panel);
+      }
+    } else if (chartPanel && panel.parentElement !== chartPanel) {
+      chartPanel.appendChild(panel);
+    }
+
+    const box = panel.querySelector('#chronologyList');
+    if (box) box.innerHTML = items.length
+      ? chronologyTable(items)
+      : '<p class="muted">Tiada laporan atau arahan diterima.</p>';
+
+    const closePanel = () => {
+      panel.hidden = true;
+      panel.style.setProperty('display', 'none', 'important');
+      if (btn) {
+        btn.textContent = 'KRONOLOGI';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    };
+
+    const openPanel = () => {
+      // Satu paparan sahaja di ruang Carta Operasi pada satu masa.
+      const victimPanel = $('#corAduPanel');
+      if (victimPanel && !victimPanel.hidden) {
+        victimPanel.hidden = true;
+        victimPanel.style.setProperty('display', 'none', 'important');
+        const victimBtn = $('#corVictimToggle');
+        if (victimBtn) {
+          victimBtn.textContent = 'MANGSA KESELURUHAN';
+          victimBtn.setAttribute('aria-expanded', 'false');
+        }
+      }
+      panel.hidden = false;
+      panel.style.removeProperty('display');
+      if (btn) {
+        btn.textContent = 'TUTUP KRONOLOGI';
+        btn.setAttribute('aria-expanded', 'true');
+      }
+      chartPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    if (btn && btn.dataset.boundChronology !== '1') {
+      btn.dataset.boundChronology = '1';
+      btn.addEventListener('click', () => panel.hidden ? openPanel() : closePanel());
+    }
+    const closeBtn = panel.querySelector('#corChronologyClose');
+    if (closeBtn && closeBtn.dataset.boundChronology !== '1') {
+      closeBtn.dataset.boundChronology = '1';
+      closeBtn.addEventListener('click', closePanel);
+    }
+
+    // Kekalkan keadaan semasa ketika data dimuat semula; kali pertama mesti tertutup.
+    if (!panel.dataset.initialized) {
+      panel.dataset.initialized = '1';
+      closePanel();
+    }
+    return;
+  }
+
+  // Tempat tugas selain COR kekalkan paparan KRONOLOGI asal.
   if (!panel) {
     const instructionList = document.querySelector('#instructionList');
     const instructionPanel = instructionList?.closest('section');
@@ -261,12 +355,10 @@ function renderChronology(items) {
 
   const box = panel.querySelector('#chronologyList');
   if (!box) return;
-
   box.innerHTML = items.length
     ? chronologyTable(items)
     : '<p class="muted">Tiada laporan atau arahan diterima.</p>';
 }
-
 function chronologyTable(items) {
   const body = items.map((m, index) => {
     const dt = m.created_at ? new Date(m.created_at) : null;
@@ -997,6 +1089,13 @@ async function renderCorAduStatus(){
     if(b){b.setAttribute('aria-expanded','false'); b.textContent='MANGSA KESELURUHAN';}
   };
   const openPanel=async()=>{
+    const chronologyPanel=$('#chronologyPanel');
+    if(chronologyPanel && !chronologyPanel.hidden){
+      chronologyPanel.hidden=true;
+      chronologyPanel.style.setProperty('display','none','important');
+      const chronologyBtn=$('#corChronologyToggle');
+      if(chronologyBtn){chronologyBtn.textContent='KRONOLOGI';chronologyBtn.setAttribute('aria-expanded','false');}
+    }
     p.hidden=false;
     p.style.removeProperty('display');
     if(chartPlaceholder) chartPlaceholder.style.display='none';
