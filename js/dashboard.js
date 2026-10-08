@@ -139,6 +139,7 @@ async function loadAssignment() {
   await loadCommunication();
   await renderControlRoom();
   await renderAcccRoom();
+  await renderIcpRoom();
   await renderAduModule();
   await renderTriageModule();
   await renderCorAduStatus();
@@ -530,6 +531,7 @@ async function setMessageStatus(id, status) {
 
   if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
+  if (assignment?.ecor_tempat_tugas?.kod === 'ICP') await loadIcpInbox();
   await loadCommunication();
 }
 
@@ -582,6 +584,7 @@ async function replyInstruction(source) {
 
   if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
+  if (assignment?.ecor_tempat_tugas?.kod === 'ICP') await loadIcpInbox();
   await loadCommunication();
 }
 
@@ -672,6 +675,95 @@ async function loadAcccInbox() {
   );
   box.querySelectorAll('[data-accc-reply]').forEach(b =>
     b.onclick = () => replyInstruction(rows.find(x => x.id === b.dataset.acccReply))
+  );
+}
+
+
+// ===== ICP PETI MASUK =====
+async function renderIcpRoom() {
+  const old = document.querySelector('#icpControlPanel');
+  if (old) old.remove();
+
+  const code = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
+  if (code !== 'ICP') return;
+
+  const panel = document.createElement('section');
+  panel.id = 'icpControlPanel';
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">INCIDENT COMMAND POST</p>
+        <h2>ICP — Peti Masuk Laporan</h2>
+      </div>
+      <button id="refreshIcpInbox" class="ghost">MUAT SEMULA</button>
+    </div>
+    <div class="cor-metrics">
+      <div><small>LAPORAN MASUK</small><strong id="icpTotal">0</strong></div>
+      <div><small>BELUM DIBACA</small><strong id="icpNew">0</strong></div>
+      <div><small>KRITIKAL</small><strong id="icpCritical">0</strong></div>
+      <div><small>DALAM TINDAKAN</small><strong id="icpAction">0</strong></div>
+    </div>
+    <h3>Peti Masuk ICP</h3>
+    <p class="muted">Laporan daripada submodul di bawah ICP dipaparkan di sini.</p>
+    <div id="icpInbox" class="message-list"><p class="muted">Memuatkan laporan...</p></div>`;
+
+  const anchor = document.querySelector('#chronologyPanel');
+  if (anchor) anchor.insertAdjacentElement('afterend', panel);
+  else document.querySelector('main').appendChild(panel);
+
+  $('#refreshIcpInbox').onclick = loadIcpInbox;
+  await loadIcpInbox();
+}
+
+async function loadIcpInbox() {
+  if (String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() !== 'ICP') return;
+
+  const { data, error } = await supabase
+    .from('ecor_komunikasi')
+    .select(`
+      id,jenis,tajuk,kandungan,keutamaan,status,created_at,pengirim_id,
+      dari_tempat_tugas_id,kepada_tempat_tugas_id,
+      dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
+      kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
+    `)
+    .eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
+    .eq('jenis', 'LAPORAN')
+    .neq('status', 'DITERIMA')
+    .order('created_at', { ascending:false });
+
+  const box = $('#icpInbox');
+  if (!box) return;
+  if (error) { box.innerHTML = `<p class="status">${esc(error.message)}</p>`; return; }
+
+  const rows = data || [];
+  $('#icpTotal').textContent = rows.length;
+  $('#icpNew').textContent = rows.filter(x => x.status === 'DIHANTAR' || x.status === 'BARU').length;
+  $('#icpCritical').textContent = rows.filter(x => x.keutamaan === 'KRITIKAL').length;
+  $('#icpAction').textContent = rows.filter(x => x.status === 'DALAM_TINDAKAN').length;
+
+  box.innerHTML = rows.length ? rows.map(x => `
+    <article class="message">
+      <div class="message-head">
+        <span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span>
+        <b>${esc(x.dari?.kod || '-')} → ICP</b>
+        <small>${esc(fmt(x.created_at))}</small>
+      </div>
+      <h3>${esc(x.tajuk)}</h3>
+      <p>${esc(x.kandungan)}</p>
+      <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
+      <div class="message-actions">
+        <button data-icp-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
+        <button data-icp-reply="${x.id}">BALAS</button>
+      </div>
+    </article>`).join('') : '<p class="muted">Tiada laporan daripada submodul ICP.</p>';
+
+  box.querySelectorAll('[data-icp-action]').forEach(b =>
+    b.onclick = () => setMessageStatus(b.dataset.icpAction, 'DALAM_TINDAKAN')
+  );
+  box.querySelectorAll('[data-icp-reply]').forEach(b =>
+    b.onclick = () => replyInstruction(rows.find(x => x.id === b.dataset.icpReply))
   );
 }
 
