@@ -435,6 +435,7 @@ async function loadCorInbox() {
     .eq('operasi_id', assignment.operasi_id)
     .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
     .eq('jenis', 'LAPORAN')
+    .neq('status', 'DITERIMA')
     .order('created_at', { ascending:false });
 
   const box=document.querySelector('#corInbox');
@@ -521,7 +522,28 @@ async function replyInstruction(source) {
     status:'DIHANTAR'
   });
   if (error) { alert(error.message); return; }
-  alert(`Balasan berjaya dihantar kepada ${source.dari?.kod||'tempat tugas'}.`);
+
+  // FIX 014:
+  // Selepas balasan berjaya dihantar, laporan asal dianggap telah selesai
+  // diproses dan tidak lagi dipaparkan dalam Peti Masuk.
+  // Rekod asal TIDAK dipadam supaya kekal dalam KRONOLOGI / Sejarah Komunikasi.
+  const { data: sourceUpdated, error: sourceUpdateError } = await supabase
+    .from('ecor_komunikasi')
+    .update({ status: 'DITERIMA' })
+    .eq('id', source.id)
+    .eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
+    .select('id,status')
+    .maybeSingle();
+
+  if (sourceUpdateError) {
+    alert(`Balasan berjaya dihantar, tetapi laporan asal gagal dikeluarkan daripada Peti Masuk: ${sourceUpdateError.message}`);
+  } else if (!sourceUpdated) {
+    alert('Balasan berjaya dihantar, tetapi laporan asal tidak dapat dikemas kini. Semak polisi RLS UPDATE untuk ecor_komunikasi.');
+  } else {
+    alert(`Balasan berjaya dihantar kepada ${source.dari?.kod||'tempat tugas'}.`);
+  }
+
   if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   await loadCommunication();
@@ -575,6 +597,7 @@ async function loadAcccInbox() {
     .eq('operasi_id', assignment.operasi_id)
     .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
     .eq('jenis', 'LAPORAN')
+    .neq('status', 'DITERIMA')
     .order('created_at', { ascending:false });
 
   const box = document.querySelector('#acccInbox');
