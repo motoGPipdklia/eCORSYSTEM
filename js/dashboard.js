@@ -950,38 +950,89 @@ async function sendAduReport(){
 }
 
 async function renderCorAduStatus(){
- $('#corAduPanel')?.remove(); if(assignment?.ecor_tempat_tugas?.kod!=='COR')return; ensureAduStyles();
- const p=document.createElement('section'); p.id='corAduPanel'; p.className='panel';
- p.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>Status Mangsa ADU</h2><p class="muted">VIEW ONLY — berdasarkan Tag ADU semasa.</p></div><button id="corAduRefresh" class="ghost">MUAT SEMULA</button></div>
- <div id="corAduTable"><p class="muted">Memuatkan data mangsa ADU...</p></div>
- <div id="corAduSummary"></div>
- <p id="corAduStatus" class="status"></p>`;
- ($('#controlRoomPanel')||document.querySelector('main')).insertAdjacentElement($('#controlRoomPanel')?'afterend':'beforeend',p);
- $('#corAduRefresh').onclick=loadCorAduStatus;
- await loadCorAduStatus();
+  $('#corAduPanel')?.remove();
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='COR') return;
+  ensureAduStyles();
+
+  const p=document.createElement('section');
+  p.id='corAduPanel';
+  p.className='panel';
+  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — status terkini setiap mangsa berdasarkan rekod TRIAGE dan ADU, termasuk mangsa ke SRC, BHA dan Hospital. Mangsa yang sama dikira sekali sahaja.</p></div><button id="corAduRefresh" class="ghost">MUAT SEMULA</button></div>
+  <div id="corAduTable"><p class="muted">Memuatkan data mangsa keseluruhan...</p></div>
+  <div id="corAduSummary"></div>
+  <p id="corAduStatus" class="status"></p>`;
+  ($('#controlRoomPanel')||document.querySelector('main')).insertAdjacentElement($('#controlRoomPanel')?'afterend':'beforeend',p);
+  $('#corAduRefresh').onclick=loadCorAduStatus;
+  await loadCorAduStatus();
 }
 
 async function loadCorAduStatus(){
- const q=await supabase.from('ecor_adu_mangsa')
-   .select('id,no_mangsa,nama_mangsa,jantina,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
-   .eq('operasi_id',assignment.operasi_id)
-   .order('masa_terima_adu',{ascending:true});
- const box=$('#corAduTable'), summary=$('#corAduSummary'), status=$('#corAduStatus');
- if(q.error){ if(box)box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`; if(status)status.textContent=q.error.message; return; }
- const rows=q.data||[];
- const normGender=v=>{
-   const x=String(v||'').trim().toUpperCase();
-   if(x==='LELAKI')return 'LELAKI';
-   if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA';
-   return 'BELUM DIKENALPASTI';
- };
- if(box) box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:760px"><thead><tr><th style="width:80px">BIL</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><span class="adu-tag">${aduDot(m.tag_adu_semasa)} <span>${esc(m.tag_adu_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td>${esc(String(m.status_lokasi||'DALAM_ADU')==='DALAM_ADU'?'DALAM ADU':(m.destinasi||m.status_lokasi))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa ADU direkodkan.</p>';
- const countTag=t=>rows.filter(m=>String(m.tag_adu_semasa||'').toUpperCase()===t).length;
- const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
- if(summary) summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid"><div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div><div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div><div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div><div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div><div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div><div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div><div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div><div class="adu-summary-item"><small>8. KE BHA</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="BHA").length}</strong></div><div class="adu-summary-item"><small>9. KE HOSPITAL</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="HOSPITAL").length}</strong></div><div class="adu-summary-item"><small>10. KE SRC</small><strong>${rows.filter(m=>String(m.status_lokasi||"").toUpperCase()==="SRC").length}</strong></div><div class="adu-summary-item"><small>JUMLAH MANGSA</small><strong>${rows.length}</strong></div></div></div>`;
- if(status)status.textContent=`Status mangsa ADU terkini. Jumlah mangsa: ${rows.length}.`;
-}
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='COR') return;
 
+  const [triageQ,aduQ]=await Promise.all([
+    supabase.from('ecor_triage_mangsa')
+      .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,masa_keluar_triage,catatan_pemindahan')
+      .eq('operasi_id',assignment.operasi_id),
+    supabase.from('ecor_adu_mangsa')
+      .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
+      .eq('operasi_id',assignment.operasi_id)
+  ]);
+
+  const box=$('#corAduTable'),summary=$('#corAduSummary'),status=$('#corAduStatus');
+  const err=triageQ.error||aduQ.error;
+  if(err){if(box)box.innerHTML=`<p class="status">${esc(err.message)}</p>`;if(status)status.textContent=err.message;return;}
+
+  const normGender=v=>{const x=String(v||'').trim().toUpperCase();if(x==='LELAKI')return 'LELAKI';if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA';return 'BELUM DIKENALPASTI';};
+  const normKey=m=>String(m.no_mangsa||m.id||'').trim().toUpperCase();
+  const locOf=m=>String(m.status_lokasi||'').trim().toUpperCase();
+  const timeMs=v=>{const t=v?new Date(v).getTime():0;return Number.isFinite(t)?t:0;};
+
+  // Gabungkan TRIAGE + ADU. Untuk mangsa yang sama, hanya status paling terkini dipaparkan.
+  const latest=new Map();
+  const consider=(raw,sumber)=>{
+    const key=normKey(raw); if(!key)return;
+    const isAdu=sumber==='ADU';
+    const masa=isAdu?(raw.masa_keluar_adu||raw.masa_terima_adu):(raw.masa_keluar_triage||raw.masa_terima_triage);
+    const candidate={...raw,sumber,tag_semasa:isAdu?(raw.tag_adu_semasa||raw.tag_triage):raw.tag_triage,masa_rujukan:masa,_masa:timeMs(masa)};
+    const current=latest.get(key);
+    if(!current||candidate._masa>current._masa||(candidate._masa===current._masa&&sumber==='ADU')) latest.set(key,candidate);
+  };
+  (triageQ.data||[]).forEach(m=>consider(m,'TRIAGE'));
+  (aduQ.data||[]).forEach(m=>consider(m,'ADU'));
+  const rows=[...latest.values()].sort((a,b)=>a._masa-b._masa);
+
+  const statusDestinasi=m=>{
+    const loc=locOf(m);
+    if(loc==='DALAM_TRIAGE')return 'DALAM TRIAGE';
+    if(loc==='DALAM_ADU'||loc==='ADU')return 'DALAM ADU';
+    if(loc==='SRC')return m.destinasi||'SURVIVOR RECEPTION CENTRE (SRC)';
+    if(loc==='BHA')return m.destinasi||'BODY HOLDING AREA (BHA)';
+    if(loc==='HOSPITAL')return m.destinasi||'HOSPITAL';
+    return m.destinasi||String(m.status_lokasi||'-').replaceAll('_',' ');
+  };
+
+  if(box)box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:900px"><thead><tr><th style="width:80px">BIL</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><span class="adu-tag">${aduDot(m.tag_semasa)} <span>${esc(m.tag_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-destination">${esc(statusDestinasi(m))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa direkodkan.</p>';
+
+  const countTag=t=>rows.filter(m=>String(m.tag_semasa||'').toUpperCase()===t).length;
+  const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
+  const countLoc=(...locs)=>rows.filter(m=>locs.includes(locOf(m))).length;
+  if(summary)summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid">
+    <div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div>
+    <div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div>
+    <div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div>
+    <div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div>
+    <div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div>
+    <div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div>
+    <div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div>
+    <div class="adu-summary-item"><small>8. DALAM TRIAGE</small><strong>${countLoc('DALAM_TRIAGE')}</strong></div>
+    <div class="adu-summary-item"><small>9. DALAM ADU</small><strong>${countLoc('DALAM_ADU','ADU')}</strong></div>
+    <div class="adu-summary-item"><small>10. KE BHA</small><strong>${countLoc('BHA')}</strong></div>
+    <div class="adu-summary-item"><small>11. KE HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
+    <div class="adu-summary-item"><small>12. KE SRC</small><strong>${countLoc('SRC')}</strong></div>
+    <div class="adu-summary-item"><small>13. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
+  </div></div>`;
+  if(status)status.textContent=`Status mangsa keseluruhan terkini. Jumlah mangsa: ${rows.length}.`;
+}
 
 
 // ===== FIX 022: ICP — STATUS MANGSA TRIAGE (VIEW ONLY) =====
