@@ -141,7 +141,6 @@ async function loadAssignment() {
   await renderAcccRoom();
   await renderIcpRoom();
   await renderIcpTriageStatus();
-  await renderIcpOverallVictimStatus();
   await renderAduModule();
   await renderTriageModule();
   await renderCorAduStatus();
@@ -951,19 +950,53 @@ async function sendAduReport(){
 
 async function renderCorAduStatus(){
   $('#corAduPanel')?.remove();
+  $('#corVictimToggle')?.remove();
   if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='COR') return;
   ensureAduStyles();
+
+  // FIX 027: butang MANGSA KESELURUHAN hanya untuk COR, di sebelah LOG KELUAR.
+  const logoutBtn=$('#logout');
+  if(logoutBtn){
+    const btn=document.createElement('button');
+    btn.id='corVictimToggle';
+    btn.type='button';
+    btn.className='ghost';
+    btn.textContent='MANGSA KESELURUHAN';
+    btn.setAttribute('aria-expanded','false');
+    logoutBtn.insertAdjacentElement('beforebegin',btn);
+  }
 
   const p=document.createElement('section');
   p.id='corAduPanel';
   p.className='panel';
-  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — status terkini setiap mangsa berdasarkan rekod TRIAGE dan ADU, termasuk mangsa ke SRC, BHA dan Hospital. Mangsa yang sama dikira sekali sahaja.</p></div><button id="corAduRefresh" class="ghost">MUAT SEMULA</button></div>
-  <div id="corAduTable"><p class="muted">Memuatkan data mangsa keseluruhan...</p></div>
+  p.hidden=true;
+  p.style.setProperty('display','none','important');
+  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — status terkini setiap mangsa berdasarkan rekod TRIAGE dan ADU, termasuk mangsa ke SRC, BHA dan Hospital. Mangsa yang sama dikira sekali sahaja.</p></div><div class="adu-actions"><button id="corAduRefresh" class="ghost">MUAT SEMULA</button><button id="corAduClose" class="ghost">TUTUP</button></div></div>
+  <div id="corAduTable"><p class="muted">Tekan MANGSA KESELURUHAN untuk memaparkan data.</p></div>
   <div id="corAduSummary"></div>
   <p id="corAduStatus" class="status"></p>`;
   ($('#controlRoomPanel')||document.querySelector('main')).insertAdjacentElement($('#controlRoomPanel')?'afterend':'beforeend',p);
+
+  let loaded=false;
+  const closePanel=()=>{
+    p.hidden=true;
+    p.style.setProperty('display','none','important');
+    const b=$('#corVictimToggle');
+    if(b){b.setAttribute('aria-expanded','false'); b.textContent='MANGSA KESELURUHAN';}
+  };
+  const openPanel=async()=>{
+    p.hidden=false;
+    p.style.removeProperty('display');
+    const b=$('#corVictimToggle');
+    if(b){b.setAttribute('aria-expanded','true'); b.textContent='TUTUP MANGSA KESELURUHAN';}
+    if(!loaded){loaded=true; await loadCorAduStatus();}
+    p.scrollIntoView({behavior:'smooth',block:'start'});
+  };
+
+  $('#corVictimToggle').onclick=()=>p.hidden?openPanel():closePanel();
+  $('#corAduClose').onclick=closePanel;
   $('#corAduRefresh').onclick=loadCorAduStatus;
-  await loadCorAduStatus();
+  closePanel();
 }
 
 async function loadCorAduStatus(){
