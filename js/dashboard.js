@@ -10,17 +10,16 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({
 const fmt = (v) => v ? new Date(v).toLocaleString('ms-MY') : '-';
 
 
-// ===== FIX 054: MENU 3 TITIK COR + LOG KELUAR MERAH =====
+// ===== FIX 055: MENU BERTINGKAT COR =====
 function setupCorTopMenu(){
   const header=document.querySelector('header.top');
   const logout=$('#logout');
-  if(logout){
-    logout.classList.add('ecor-logout-red');
-  }
+  if(logout) logout.classList.add('ecor-logout-red');
+
   const isCor=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='COR';
   if(!header || !isCor) return;
 
-  // Butang asal kekal sebagai pemegang fungsi, tetapi tidak dipaparkan terus di header.
+  // Butang fungsi asal dikekalkan tetapi disorok daripada header.
   const chronologyBtn=$('#corChronologyToggle');
   const victimBtn=$('#corVictimToggle');
   if(chronologyBtn) chronologyBtn.style.display='none';
@@ -34,17 +33,42 @@ function setupCorTopMenu(){
     wrap.innerHTML=`
       <button id="corTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu COR" aria-expanded="false">⋮</button>
       <div id="corTopMenuDropdown" class="cor-menu-dropdown" hidden>
-        <button type="button" data-cor-menu="chronology">KRONOLOGI</button>
-        <button type="button" data-cor-menu="victims">MANGSA KESELURUHAN</button>
+        <div class="cor-menu-parent" id="corChartMenu">
+          <button type="button" class="cor-menu-chart" aria-haspopup="true" aria-expanded="false">CARTA <span>▶</span></button>
+          <div class="cor-menu-submenu" id="corChartSubmenu" hidden>
+            <button type="button" data-cor-menu="chronology">KRONOLOGI</button>
+            <button type="button" data-cor-menu="victims">MANGSA KESELURUHAN</button>
+          </div>
+        </div>
+        <button type="button" data-cor-menu="movement">PERGERAKAN MANGSA</button>
       </div>`;
     header.insertBefore(wrap,header.firstChild);
   }
 
   const toggle=$('#corTopMenuToggle');
   const dropdown=$('#corTopMenuDropdown');
+  const chartMenu=$('#corChartMenu');
+  const chartButton=chartMenu?.querySelector('.cor-menu-chart');
+  const submenu=$('#corChartSubmenu');
   if(!toggle || !dropdown) return;
-  const closeMenu=()=>{dropdown.hidden=true;toggle.setAttribute('aria-expanded','false');};
-  const openMenu=()=>{dropdown.hidden=false;toggle.setAttribute('aria-expanded','true');};
+
+  const closeSubmenu=()=>{
+    if(submenu) submenu.hidden=true;
+    chartButton?.setAttribute('aria-expanded','false');
+  };
+  const openSubmenu=()=>{
+    if(submenu) submenu.hidden=false;
+    chartButton?.setAttribute('aria-expanded','true');
+  };
+  const closeMenu=()=>{
+    dropdown.hidden=true;
+    toggle.setAttribute('aria-expanded','false');
+    closeSubmenu();
+  };
+  const openMenu=()=>{
+    dropdown.hidden=false;
+    toggle.setAttribute('aria-expanded','true');
+  };
 
   if(toggle.dataset.bound!=='1'){
     toggle.dataset.bound='1';
@@ -52,16 +76,33 @@ function setupCorTopMenu(){
       e.stopPropagation();
       dropdown.hidden?openMenu():closeMenu();
     });
+
+    // Desktop: cursor pada CARTA membuka submenu.
+    chartMenu?.addEventListener('mouseenter',openSubmenu);
+    chartMenu?.addEventListener('mouseleave',closeSubmenu);
+    // Telefon/tablet: tekan CARTA untuk buka/tutup submenu.
+    chartButton?.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      submenu?.hidden?openSubmenu():closeSubmenu();
+    });
+
     dropdown.addEventListener('click',(e)=>{
       const b=e.target.closest('[data-cor-menu]');
       if(!b)return;
+      const action=b.dataset.corMenu;
       closeMenu();
-      if(b.dataset.corMenu==='chronology') $('#corChronologyToggle')?.click();
-      if(b.dataset.corMenu==='victims') $('#corVictimToggle')?.click();
+      if(action==='chronology') $('#corChronologyToggle')?.click();
+      if(action==='victims') $('#corVictimToggle')?.click();
+      if(action==='movement'){
+        const panel=$('#victimMovementPanel');
+        if(panel){
+          panel.hidden=false;
+          panel.scrollIntoView({behavior:'smooth',block:'start'});
+          loadVictimMovements();
+        }
+      }
     });
-    document.addEventListener('click',(e)=>{
-      if(!wrap.contains(e.target)) closeMenu();
-    });
+    document.addEventListener('click',(e)=>{if(!wrap.contains(e.target))closeMenu();});
     document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeMenu();});
   }
 }
@@ -1256,7 +1297,7 @@ async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
 }
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
- const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja. COR boleh melihat semua pergerakan mangsa.</p></div><button id="movementRefresh" class="ghost">MUAT SEMULA</button></div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
+ const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(code==='COR')p.hidden=true;p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja. COR boleh melihat semua pergerakan mangsa.</p></div><button id="movementRefresh" class="ghost">MUAT SEMULA</button></div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
  const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements; await loadVictimMovements();
 }
 async function loadVictimMovements(){
