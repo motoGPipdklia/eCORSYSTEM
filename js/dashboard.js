@@ -932,8 +932,8 @@ async function forwardIcpReport(source, button) {
 }
 
 // ===== FIX 035: PERGERAKAN MANGSA BERPUSAT =====
-const movementCodes=['TRIAGE','ADU','SRC','BHA'];
-const movementLabel=d=>({SRC:'MANGSA DALAM PERJALANAN KE SRC',ADU:'MANGSA DALAM PERJALANAN KE ADU',HOSPITAL:'MANGSA DALAM PERJALANAN KE HOSPITAL',BHA:'MANGSA KE BHA'})[String(d||'').toUpperCase()]||`MANGSA DALAM PERJALANAN KE ${String(d||'-').toUpperCase()}`;
+const movementCodes=['TRIAGE','ADU','SRC','BHA','PMA'];
+const movementLabel=d=>({SRC:'MANGSA DALAM PERJALANAN KE SRC',ADU:'MANGSA DALAM PERJALANAN KE ADU',HOSPITAL:'MANGSA DALAM PERJALANAN KE HOSPITAL',BHA:'MANGSA KE BHA',PMA:'MANGSA DALAM PERJALANAN KE PMA'})[String(d||'').toUpperCase()]||`MANGSA DALAM PERJALANAN KE ${String(d||'-').toUpperCase()}`;
 async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
  const payload={operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||null,asal:String(asal).toUpperCase(),destinasi:String(destinasi).toUpperCase(),destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
  const q=await supabase.from('ecor_pergerakan_mangsa').insert(payload).select('id').single();
@@ -942,7 +942,7 @@ async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
 function movementDuration(v){if(!v)return'-';const ms=Date.now()-new Date(v).getTime();if(!Number.isFinite(ms)||ms<0)return'-';const min=Math.floor(ms/60000),h=Math.floor(min/60);return h?`${h} jam ${min%60} minit`:`${min} minit`;}
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
- const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Notifikasi perjalanan mangsa antara TRIAGE, ADU, SRC, HOSPITAL dan BHA. Lokasi penerima perlu mengesahkan ketibaan.</p></div><button id="movementRefresh" class="ghost">MUAT SEMULA</button></div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
+ const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Notifikasi perjalanan mangsa antara TRIAGE, ADU, SRC, HOSPITAL, BHA dan PMA. Lokasi penerima perlu mengesahkan ketibaan.</p></div><button id="movementRefresh" class="ghost">MUAT SEMULA</button></div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
  const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements; await loadVictimMovements();
 }
 async function loadVictimMovements(){
@@ -1542,7 +1542,10 @@ async function documentSrcVictim(m){
 }
 
 async function moveSrcToPma(m){
- if(m.status_dokumentasi!=='SELESAI'){alert('Dokumentasi Pasukan Siasatan mesti diselesaikan sebelum mangsa dihantar ke PMA.');return} if(!['HIJAU','KUNING'].includes(String(m.tag_src_semasa||'').toUpperCase())){alert('Hanya mangsa tag HIJAU / KUNING yang stabil boleh dihantar ke PMA.');return} const note=prompt('Catatan pemindahan ke PRIVATE MATCHING AREA (PMA):')||'';await moveSrcVictim(m,'PMA','PRIVATE MATCHING AREA (PMA)',note);
+ if(m.status_dokumentasi!=='SELESAI'){alert('Dokumentasi Pasukan Siasatan mesti diselesaikan sebelum mangsa dihantar ke PMA.');return}
+ if(!['HIJAU','KUNING'].includes(String(m.tag_src_semasa||'').toUpperCase())){alert('Hanya mangsa tag HIJAU / KUNING yang stabil boleh dihantar ke PMA.');return}
+ const note=prompt('Catatan pergerakan mangsa ke PRIVATE MATCHING AREA (PMA):')||'';
+ await moveSrcVictim(m,'PMA','PRIVATE MATCHING AREA (PMA)',note);
 }
 
 async function transferSrcVictim(m){
@@ -1551,8 +1554,8 @@ async function transferSrcVictim(m){
 
 async function moveSrcVictim(m,statusLokasi,destinasi,note=''){
  if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari SRC ke ${destinasi}?`))return;
- if(['ADU','HOSPITAL','BHA'].includes(statusLokasi)){const mv=await createVictimMovement(m,'SRC',statusLokasi,destinasi,note);if(!mv)return;}
- const q=await supabase.from('ecor_src_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_src:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return}alert(statusLokasi==='PMA'?`Mangsa berjaya dipindahkan ke ${destinasi}.`:`Mangsa ${m.no_mangsa} kini ${movementLabel(statusLokasi)}.`);await loadSrcData();await loadVictimMovements();
+ if(['ADU','HOSPITAL','BHA','PMA'].includes(statusLokasi)){const mv=await createVictimMovement(m,'SRC',statusLokasi,destinasi,note);if(!mv)return;}
+ const q=await supabase.from('ecor_src_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_src:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return}alert(`Mangsa ${m.no_mangsa} kini ${movementLabel(statusLokasi)}.`);await loadSrcData();await loadVictimMovements();
 }
 async function showSrcHistory(m){
  const q=await supabase.from('ecor_src_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return} alert(`SEJARAH TAG SRC — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
