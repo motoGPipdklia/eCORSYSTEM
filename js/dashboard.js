@@ -210,15 +210,51 @@ async function loadCorInboxModal(type){
   if(!box || !assignment) return;
   const kind=String(type||'').toUpperCase()==='ARAHAN'?'ARAHAN':'LAPORAN';
   box.innerHTML='<p class="muted">Memuatkan peti masuk...</p>';
-  const {data,error}=await supabase.from('ecor_komunikasi').select(`
+  // FIX 071: PETI MASUK menu COR mesti menggunakan sumber/kaedah yang sama
+  // seperti Peti Masuk COR sebenar: hanya mesej yang DIHANTAR KEPADA COR dan
+  // belum selesai (status DITERIMA tidak lagi berada dalam peti masuk).
+  let query=supabase.from('ecor_komunikasi').select(`
     id,jenis,tajuk,kandungan,keutamaan,status,created_at,
     pengirim_id,dari_tempat_tugas_id,kepada_tempat_tugas_id,
     dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
     kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
-  `).eq('operasi_id',assignment.operasi_id).eq('kepada_tempat_tugas_id',assignment.tempat_tugas_id).eq('jenis',kind).order('created_at',{ascending:false});
+  `)
+    .eq('operasi_id',assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id',assignment.tempat_tugas_id)
+    .eq('jenis',kind)
+    .neq('status','DITERIMA')
+    .order('created_at',{ascending:false});
+
+  const {data,error}=await query;
   if(error){box.innerHTML=`<p class="status">${esc(error.message)}</p>`;return;}
   const rows=data||[];
-  box.innerHTML=rows.length?rows.map(messageCard).join(''):`<p class="muted">Tiada ${kind==='LAPORAN'?'laporan':'arahan'} diterima.</p>`;
+
+  // LAPORAN menggunakan paparan/tindakan Peti Masuk COR sebenar.
+  if(kind==='LAPORAN'){
+    box.innerHTML=rows.length ? rows.map(x=>`
+      <article class="message">
+        <div class="message-head">
+          <span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span>
+          <b>${esc(x.dari?.kod||'-')} → COR</b>
+          <small>${esc(fmt(x.created_at))}</small>
+        </div>
+        <h3>${esc(x.tajuk)}</h3>
+        <p>${esc(x.kandungan)}</p>
+        <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
+        <div class="message-actions">
+          <button data-modal-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
+          <button data-modal-reply="${x.id}">BALAS</button>
+          ${parentPlace ? `<button data-modal-forward="${x.id}" ${x.status === 'DIMAJUKAN' ? 'disabled' : ''}>${x.status === 'DIMAJUKAN' ? 'TELAH DIMAJUKAN' : 'MAJU KE SALURAN ATASAN'}</button>` : ''}
+        </div>
+      </article>`).join('') : '<p class="muted">Tiada laporan dalam Peti Masuk COR.</p>';
+    box.querySelectorAll('[data-modal-action]').forEach(b=>b.onclick=async()=>{await setMessageStatus(b.dataset.modalAction,'DALAM_TINDAKAN');await loadCorInboxModal('LAPORAN');});
+    box.querySelectorAll('[data-modal-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.modalReply)));
+    box.querySelectorAll('[data-modal-forward]').forEach(b=>b.onclick=async()=>{await forwardReportToParent(rows.find(x=>x.id===b.dataset.modalForward),b);await loadCorInboxModal('LAPORAN');});
+    return;
+  }
+
+  // ARAHAN pula hanya arahan yang masih berada dalam Peti Masuk COR.
+  box.innerHTML=rows.length?rows.map(messageCard).join(''):'<p class="muted">Tiada arahan dalam Peti Masuk COR.</p>';
 }
 
 // ===== FIX 064: LOG KOMUNIKASI COR DALAM POPUP SENDIRI =====
