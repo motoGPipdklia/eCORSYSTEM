@@ -68,6 +68,13 @@ function setupCorTopMenu(){
             <button type="button" data-cor-menu="victims">MANGSA</button>
           </div>
         </div>
+        <div class="cor-menu-parent" id="corInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="corInboxSubmenu" hidden>
+            <button type="button" data-cor-menu="inbox-report">LAPORAN</button>
+            <button type="button" data-cor-menu="inbox-instruction">ARAHAN</button>
+          </div>
+        </div>
         <button type="button" data-cor-menu="movement">PERGERAKAN MANGSA</button>
         <button type="button" data-cor-menu="communication-log">LOG KOMUNIKASI</button>
       </div>`;
@@ -79,6 +86,9 @@ function setupCorTopMenu(){
   const chartMenu=$('#corChartMenu');
   const chartButton=chartMenu?.querySelector('.cor-menu-chart');
   const submenu=$('#corChartSubmenu');
+  const inboxMenu=$('#corInboxMenu');
+  const inboxButton=inboxMenu?.querySelector('.cor-menu-inbox');
+  const inboxSubmenu=$('#corInboxSubmenu');
   if(!toggle || !dropdown) return;
 
   const closeSubmenu=()=>{
@@ -89,10 +99,19 @@ function setupCorTopMenu(){
     if(submenu) submenu.hidden=false;
     chartButton?.setAttribute('aria-expanded','true');
   };
+  const closeInboxSubmenu=()=>{
+    if(inboxSubmenu) inboxSubmenu.hidden=true;
+    inboxButton?.setAttribute('aria-expanded','false');
+  };
+  const openInboxSubmenu=()=>{
+    if(inboxSubmenu) inboxSubmenu.hidden=false;
+    inboxButton?.setAttribute('aria-expanded','true');
+  };
   const closeMenu=()=>{
     dropdown.hidden=true;
     toggle.setAttribute('aria-expanded','false');
     closeSubmenu();
+    closeInboxSubmenu();
   };
   const openMenu=()=>{
     dropdown.hidden=false;
@@ -112,7 +131,17 @@ function setupCorTopMenu(){
     // Telefon/tablet: tekan CARTA untuk buka/tutup submenu.
     chartButton?.addEventListener('click',(e)=>{
       e.stopPropagation();
+      closeInboxSubmenu();
       submenu?.hidden?openSubmenu():closeSubmenu();
+    });
+
+    // PETI MASUK menggunakan corak submenu yang sama seperti CARTA.
+    inboxMenu?.addEventListener('mouseenter',()=>{closeSubmenu();openInboxSubmenu();});
+    inboxMenu?.addEventListener('mouseleave',closeInboxSubmenu);
+    inboxButton?.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      closeSubmenu();
+      inboxSubmenu?.hidden?openInboxSubmenu():closeInboxSubmenu();
     });
 
     dropdown.addEventListener('click',(e)=>{
@@ -133,12 +162,64 @@ function setupCorTopMenu(){
       if(action==='communication-log'){
         openCorCommunicationLog();
       }
+      if(action==='inbox-report') openCorInbox('LAPORAN');
+      if(action==='inbox-instruction') openCorInbox('ARAHAN');
     });
     document.addEventListener('click',(e)=>{if(!wrap.contains(e.target))closeMenu();});
     document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeMenu();});
   }
 }
 
+
+// ===== FIX 070: COR — PETI MASUK > LAPORAN / ARAHAN =====
+async function openCorInbox(type){
+  if(!assignment) return;
+  const kind=String(type||'').toUpperCase()==='ARAHAN'?'ARAHAN':'LAPORAN';
+  let modal=$('#corInboxModal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='corInboxModal';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.style.cssText='position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,.74);backdrop-filter:blur(4px);padding:24px;overflow:auto;display:none;';
+    modal.innerHTML=`<section class="panel" style="width:min(1180px,calc(100vw - 32px));margin:40px auto;max-height:calc(100vh - 80px);overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.65)">
+      <div class="section-head" style="position:sticky;top:0;background:#081823;z-index:2;padding-top:8px">
+        <div><p class="eyebrow">PETI MASUK</p><h2 id="corInboxTitle">Peti Masuk</h2></div>
+        <div class="adu-actions"><button id="corInboxRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corInboxClose" type="button" class="ghost">TUTUP ×</button></div>
+      </div>
+      <div id="corInboxList" class="message-list"><p class="muted">Memuatkan peti masuk...</p></div>
+    </section>`;
+    document.body.appendChild(modal);
+    $('#corInboxClose').onclick=closeCorInbox;
+    $('#corInboxRefresh').onclick=()=>loadCorInboxModal(modal.dataset.kind||'LAPORAN');
+    modal.addEventListener('click',e=>{if(e.target===modal) closeCorInbox();});
+  }
+  modal.dataset.kind=kind;
+  $('#corInboxTitle').textContent=kind==='LAPORAN'?'Laporan Masuk':'Arahan Diterima';
+  modal.style.display='block';
+  document.body.style.overflow='hidden';
+  await loadCorInboxModal(kind);
+}
+function closeCorInbox(){
+  const modal=$('#corInboxModal');
+  if(modal) modal.style.display='none';
+  document.body.style.overflow='';
+}
+async function loadCorInboxModal(type){
+  const box=$('#corInboxList');
+  if(!box || !assignment) return;
+  const kind=String(type||'').toUpperCase()==='ARAHAN'?'ARAHAN':'LAPORAN';
+  box.innerHTML='<p class="muted">Memuatkan peti masuk...</p>';
+  const {data,error}=await supabase.from('ecor_komunikasi').select(`
+    id,jenis,tajuk,kandungan,keutamaan,status,created_at,
+    pengirim_id,dari_tempat_tugas_id,kepada_tempat_tugas_id,
+    dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
+    kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
+  `).eq('operasi_id',assignment.operasi_id).eq('kepada_tempat_tugas_id',assignment.tempat_tugas_id).eq('jenis',kind).order('created_at',{ascending:false});
+  if(error){box.innerHTML=`<p class="status">${esc(error.message)}</p>`;return;}
+  const rows=data||[];
+  box.innerHTML=rows.length?rows.map(messageCard).join(''):`<p class="muted">Tiada ${kind==='LAPORAN'?'laporan':'arahan'} diterima.</p>`;
+}
 
 // ===== FIX 064: LOG KOMUNIKASI COR DALAM POPUP SENDIRI =====
 // Tidak lagi bergantung kepada panel Sejarah Komunikasi asal / atribut hidden.
