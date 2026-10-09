@@ -2080,6 +2080,22 @@ async function loadCorAduStatus(){
 
   const countTag=t=>rows.filter(m=>String(m.tag_semasa||'').toUpperCase()===t).length;
   const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
+  const latestMovementFor=m=>movementByVictim.get(normKey(m));
+  // FIX 076: SRC hanya mengira mangsa yang masih berada di SRC atau sedang bergerak keluar dari SRC.
+  // Jika pergerakan terkini sudah TIBA di PMA / ADU / HOSPITAL / BHA atau sudah dipertemukan dengan waris,
+  // mangsa tidak lagi dianggap berada di SRC.
+  const isSrcActive=m=>{
+    const mv=latestMovementFor(m);
+    if(mv){
+      if(mv.dipertemukan_dengan_waris===true) return false;
+      const st=String(mv.status||'').trim().toUpperCase();
+      const asal=String(mv.asal||'').trim().toUpperCase();
+      const dest=String(mv.destinasi||'').trim().toUpperCase();
+      if(st==='DALAM_PERJALANAN' && asal==='SRC') return true;
+      if(st==='TIBA') return dest==='SRC';
+    }
+    return locOf(m)==='SRC';
+  };
   const countLoc=(...locs)=>rows.filter(m=>locs.includes(locOf(m))).length;
   const latestMovement=[...movementByVictim.values()];
   const countAtMovementDest=d=>latestMovement.filter(m=>String(m.status).toUpperCase()==='TIBA'&&String(m.destinasi||'').toUpperCase()===d&&m.dipertemukan_dengan_waris!==true).length;
@@ -2091,7 +2107,8 @@ async function loadCorAduStatus(){
     if(filter.startsWith('GENDER:')) return rows.filter(m=>normGender(m.jantina)===filter.slice(7));
     if(filter==='TRIAGE') return rows.filter(m=>locOf(m)==='DALAM_TRIAGE');
     if(filter==='ADU') return rows.filter(m=>['DALAM_ADU','ADU'].includes(locOf(m)));
-    if(['BHA','HOSPITAL','SRC'].includes(filter)) return rows.filter(m=>locOf(m)===filter);
+    if(filter==='SRC') return rows.filter(isSrcActive);
+    if(['BHA','HOSPITAL'].includes(filter)) return rows.filter(m=>locOf(m)===filter);
     if(filter==='PMA') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv&&String(mv.status).toUpperCase()==='TIBA'&&String(mv.destinasi||'').toUpperCase()==='PMA'&&mv.dipertemukan_dengan_waris!==true;});
     if(filter==='REUNITED') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv?.dipertemukan_dengan_waris===true;});
     return [];
@@ -2115,7 +2132,7 @@ async function loadCorAduStatus(){
       ${tile(9,'9. ADU',countLoc('DALAM_ADU','ADU'),'ADU')}
       ${tile(10,'10. BHA',countLoc('BHA'),'BHA')}
       ${tile(11,'11. HOSPITAL',countLoc('HOSPITAL'),'HOSPITAL')}
-      ${tile(12,'12. SRC',countLoc('SRC'),'SRC')}
+      ${tile(12,'12. SRC',rows.filter(isSrcActive).length,'SRC')}
       ${tile(13,'13. PMA',countPma,'PMA')}
       ${tile(14,'14. MANGSA DIPERTEMUKAN DENGAN WARIS',countReunited,'REUNITED')}
       ${tile(15,'15. JUMLAH MANGSA',rows.length,'ALL')}
