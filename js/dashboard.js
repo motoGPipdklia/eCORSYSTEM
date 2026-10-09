@@ -455,7 +455,7 @@ async function loadAssignment() {
 let corCommandTargets = [];
 
 async function getCorCommandTargets() {
-  if (!assignment || String(assignment.ecor_tempat_tugas?.kod || '').toUpperCase() !== 'COR') return [];
+  if (!assignment || !['COR','ACCC'].includes(String(assignment.ecor_tempat_tugas?.kod || '').trim().toUpperCase())) return [];
 
   const { data, error } = await supabase
     .from('ecor_tempat_tugas')
@@ -464,10 +464,11 @@ async function getCorCommandTargets() {
 
   if (error) throw error;
   const places = data || [];
-  const corId = assignment.tempat_tugas_id;
+  const sourceId = assignment.tempat_tugas_id;
+  const sourceCode = String(assignment.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
   const descendants = [];
-  const queue = [corId];
-  const seen = new Set([corId]);
+  const queue = [sourceId];
+  const seen = new Set([sourceId]);
 
   while (queue.length) {
     const parentId = queue.shift();
@@ -479,20 +480,30 @@ async function getCorCommandTargets() {
     }
   }
 
-  // BHA dikunci kepada saluran ICP ⇄ BHA sahaja. COR tidak boleh hantar terus ke BHA.
-  return descendants.filter(x => String(x.kod || '').trim().toUpperCase() !== 'BHA');
+  // Untuk COR, BHA kekal dikunci kepada saluran ICP ⇄ BHA.
+  // ACCC menggunakan struktur submodul di bawah ACCC seperti borang arahan COR.
+  return sourceCode === 'COR'
+    ? descendants.filter(x => String(x.kod || '').trim().toUpperCase() !== 'BHA')
+    : descendants;
 }
 
 async function setupCorCommandCard() {
-  if (String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() !== 'COR') return;
+  const sourceCode = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
+  if (!['COR','ACCC'].includes(sourceCode)) return;
 
-  const count = $('#instructionCount');
-  const card = count?.closest('article.card');
+  let card;
+  if (sourceCode === 'COR') {
+    const count = $('#instructionCount');
+    card = count?.closest('article.card');
+  } else {
+    // ACCC: gantikan kad Hantar Laporan di sebelah kiri kepada Hantar Arahan.
+    card = $('#openReport')?.closest('article.card');
+  }
   if (!card) return;
 
   card.innerHTML = `
     <h2>Hantar Arahan</h2>
-    <p>Hantar arahan kepada submodul di bawah COR.</p>
+    <p>Hantar arahan kepada submodul di bawah ${esc(sourceCode)}.</p>
     <button id="openCommand" type="button">HANTAR ARAHAN</button>`;
 
   $('#openCommand').onclick = openCorCommandModal;
@@ -516,10 +527,10 @@ async function openCorCommandModal() {
     modal.innerHTML = `
       <div class="report-modal-card">
         <div class="section-head">
-          <h2>Hantar Arahan COR</h2>
+          <h2 id="commandModalTitle">Hantar Arahan</h2>
           <button id="closeCommand" type="button" class="ghost">TUTUP ×</button>
         </div>
-        <div class="route-box"><span>COR — CRISIS OPERATION ROOM</span><b>→</b><span id="commandRouteTo">PILIH SUBMODUL</span></div>
+        <div class="route-box"><span id="commandRouteFrom">-</span><b>→</b><span id="commandRouteTo">PILIH SUBMODUL</span></div>
         <form id="commandForm">
           <label>Destinasi / Submodul
             <select id="commandTarget" required></select>
@@ -547,11 +558,16 @@ async function openCorCommandModal() {
     $('#commandForm').addEventListener('submit', sendCorCommand);
   }
 
+  const sourceCode = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
+  const sourceName = assignment?.ecor_tempat_tugas?.nama || '';
+  if ($('#commandModalTitle')) $('#commandModalTitle').textContent = `Hantar Arahan ${sourceCode}`;
+  if ($('#commandRouteFrom')) $('#commandRouteFrom').textContent = `${sourceCode} — ${sourceName}`;
+
   const select = $('#commandTarget');
   select.innerHTML = '<option value="">-- PILIH SUBMODUL --</option>' + corCommandTargets.map(x =>
     `<option value="${esc(x.id)}">${esc(x.kod)} — ${esc(x.nama || '')}</option>`
   ).join('');
-  $('#commandStatus').textContent = corCommandTargets.length ? '' : 'Tiada submodul ditemui di bawah COR.';
+  $('#commandStatus').textContent = corCommandTargets.length ? '' : `Tiada submodul ditemui di bawah ${sourceCode}.`;
   updateCorCommandRoute();
   modal.classList.remove('hidden');
   document.body.classList.add('report-modal-open');
@@ -573,7 +589,8 @@ async function sendCorCommand(e) {
   const status = $('#commandStatus');
   const target = corCommandTargets.find(x => x.id === $('#commandTarget')?.value);
   if (!target) { status.textContent = 'Sila pilih submodul penerima.'; return; }
-  if (String(target.kod || '').toUpperCase() === 'BHA') { status.textContent = 'BHA hanya boleh berkomunikasi dengan ICP.'; return; }
+  const sourceCode = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
+  if (sourceCode === 'COR' && String(target.kod || '').toUpperCase() === 'BHA') { status.textContent = 'BHA hanya boleh berkomunikasi dengan ICP.'; return; }
 
   status.textContent = 'Menghantar arahan...';
   const { error } = await supabase.from('ecor_komunikasi').insert({
