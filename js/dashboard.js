@@ -1551,7 +1551,7 @@ async function loadCorAduStatus(){
   const detailTitle={PUTIH:'PUTIH',MERAH:'MERAH',KUNING:'KUNING',HIJAU:'HIJAU','GENDER:LELAKI':'JANTINA — LELAKI','GENDER:WANITA':'JANTINA — WANITA','GENDER:BELUM DIKENALPASTI':'JANTINA — BELUM DIKENALPASTI',TRIAGE:'TRIAGE',ADU:'ADU',BHA:'BODY HOLDING AREA (BHA)',HOSPITAL:'HOSPITAL',SRC:'SURVIVOR RECEPTION CENTRE (SRC)',PMA:'PRIVATE MATCHING AREA (PMA)',REUNITED:'MANGSA DIPERTEMUKAN DENGAN WARIS',ALL:'JUMLAH MANGSA'};
   const detailHtml=(filter)=>{
     const list=detailRows(filter);
-    return `<div class="adu-summary-detail" style="margin-top:18px;border:1px solid rgba(148,163,184,.25);border-radius:16px;overflow:hidden"><div class="section-head" style="padding:16px"><div><p class="eyebrow">BUTIRAN MANGSA</p><h3>${esc(detailTitle[filter]||filter)}</h3><p class="muted">Jumlah: ${list.length}</p></div><button type="button" id="corSummaryDetailClose" class="ghost">TUTUP</button></div>${list.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:900px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${list.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><b>${esc(m.no_mangsa||'-')}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} <span>${esc(m.tag_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-destination">${esc(statusDestinasi(m))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:0 16px 18px">Tiada rekod mangsa dalam kategori ini.</p>'}</div>`;
+    return `<div id="corSummaryDetailModal" role="dialog" aria-modal="true" aria-label="Butiran Mangsa" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:22px"><div class="adu-summary-detail" style="width:min(1180px,96vw);max-height:88vh;background:#071722;border:1px solid rgba(148,163,184,.35);border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden;display:flex;flex-direction:column"><div class="section-head" style="padding:18px 20px;flex:0 0 auto;border-bottom:1px solid rgba(148,163,184,.2)"><div><p class="eyebrow">BUTIRAN MANGSA</p><h3>${esc(detailTitle[filter]||filter)}</h3><p class="muted">Jumlah: ${list.length}</p></div><button type="button" id="corSummaryDetailClose" class="ghost">TUTUP ×</button></div><div style="overflow:auto;flex:1 1 auto">${list.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:900px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${list.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><b>${esc(m.no_mangsa||'-')}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} <span>${esc(m.tag_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-destination">${esc(statusDestinasi(m))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:20px">Tiada rekod mangsa dalam kategori ini.</p>'}</div></div></div>`;
   };
   const tile=(n,label,value,filter,cls='')=>`<button type="button" class="adu-summary-item cor-summary-click ${cls}" data-cor-filter="${esc(filter)}" style="text-align:left;cursor:pointer;border:0;background:transparent;color:inherit;width:100%"><small>${label}</small><strong>${value}</strong></button>`;
   if(summary){
@@ -1571,13 +1571,17 @@ async function loadCorAduStatus(){
       ${tile(13,'13. PMA',countPma,'PMA')}
       ${tile(14,'14. MANGSA DIPERTEMUKAN DENGAN WARIS',countReunited,'REUNITED')}
       ${tile(15,'15. JUMLAH MANGSA',rows.length,'ALL')}
-    </div><div id="corSummaryDetail"></div></div>`;
+    </div></div>`;
     summary.querySelectorAll('[data-cor-filter]').forEach(btn=>btn.addEventListener('click',()=>{
-      const detail=summary.querySelector('#corSummaryDetail');
-      if(!detail)return;
-      detail.innerHTML=detailHtml(btn.dataset.corFilter);
-      detail.querySelector('#corSummaryDetailClose')?.addEventListener('click',()=>{detail.innerHTML='';});
-      detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+      document.querySelector('#corSummaryDetailModal')?.remove();
+      document.body.insertAdjacentHTML('beforeend',detailHtml(btn.dataset.corFilter));
+      const modal=document.querySelector('#corSummaryDetailModal');
+      if(!modal)return;
+      const close=()=>modal.remove();
+      modal.querySelector('#corSummaryDetailClose')?.addEventListener('click',close);
+      modal.addEventListener('click',e=>{if(e.target===modal)close();});
+      const onKey=e=>{if(e.key==='Escape'){close();document.removeEventListener('keydown',onKey);}};
+      document.addEventListener('keydown',onKey);
     }));
   }
   if(status)status.textContent=`Status mangsa keseluruhan terkini. Jumlah mangsa: ${rows.length}.`;
