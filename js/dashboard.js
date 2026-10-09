@@ -314,6 +314,7 @@ async function loadAssignment() {
   }
 
   $('#status').textContent = 'Penugasan aktif dimuatkan.';
+  await setupCorCommandCard();
   await loadCommunication();
   await renderControlRoom();
   await renderBhaModule();
@@ -330,6 +331,151 @@ async function loadAssignment() {
   await renderVictimMovementPanel();
   await renderCorAduStatus();
   setupCorTopMenu();
+}
+
+
+// ===== FIX 066: COR — HANTAR ARAHAN KE SUBMODUL =====
+let corCommandTargets = [];
+
+async function getCorCommandTargets() {
+  if (!assignment || String(assignment.ecor_tempat_tugas?.kod || '').toUpperCase() !== 'COR') return [];
+
+  const { data, error } = await supabase
+    .from('ecor_tempat_tugas')
+    .select('id,kod,nama,parent_id')
+    .order('kod', { ascending: true });
+
+  if (error) throw error;
+  const places = data || [];
+  const corId = assignment.tempat_tugas_id;
+  const descendants = [];
+  const queue = [corId];
+  const seen = new Set([corId]);
+
+  while (queue.length) {
+    const parentId = queue.shift();
+    for (const place of places.filter(x => x.parent_id === parentId)) {
+      if (seen.has(place.id)) continue;
+      seen.add(place.id);
+      queue.push(place.id);
+      descendants.push(place);
+    }
+  }
+
+  // BHA dikunci kepada saluran ICP ⇄ BHA sahaja. COR tidak boleh hantar terus ke BHA.
+  return descendants.filter(x => String(x.kod || '').trim().toUpperCase() !== 'BHA');
+}
+
+async function setupCorCommandCard() {
+  if (String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() !== 'COR') return;
+
+  const count = $('#instructionCount');
+  const card = count?.closest('article.card');
+  if (!card) return;
+
+  card.innerHTML = `
+    <h2>Hantar Arahan</h2>
+    <p>Hantar arahan kepada submodul di bawah COR.</p>
+    <button id="openCommand" type="button">HANTAR ARAHAN</button>`;
+
+  $('#openCommand').onclick = openCorCommandModal;
+}
+
+async function openCorCommandModal() {
+  try {
+    corCommandTargets = await getCorCommandTargets();
+  } catch (err) {
+    alert(`Gagal memuatkan submodul: ${err.message}`);
+    return;
+  }
+
+  let modal = $('#corCommandModal');
+  if (!modal) {
+    modal = document.createElement('section');
+    modal.id = 'corCommandModal';
+    modal.className = 'report-modal hidden';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.innerHTML = `
+      <div class="report-modal-card">
+        <div class="section-head">
+          <h2>Hantar Arahan COR</h2>
+          <button id="closeCommand" type="button" class="ghost">TUTUP ×</button>
+        </div>
+        <div class="route-box"><span>COR — CRISIS OPERATION ROOM</span><b>→</b><span id="commandRouteTo">PILIH SUBMODUL</span></div>
+        <form id="commandForm">
+          <label>Destinasi / Submodul
+            <select id="commandTarget" required></select>
+          </label>
+          <label>Tajuk Arahan
+            <input id="commandTitle" required maxlength="180" placeholder="Contoh: Sediakan laporan situasi semasa">
+          </label>
+          <label>Keutamaan
+            <select id="commandPriority">
+              <option value="BIASA">BIASA</option><option value="PENTING">PENTING</option><option value="SEGERA">SEGERA</option><option value="KRITIKAL">KRITIKAL</option>
+            </select>
+          </label>
+          <label>Kandungan Arahan
+            <textarea id="commandBody" required placeholder="Masukkan kandungan arahan..."></textarea>
+          </label>
+          <button id="commandSubmit" type="submit">HANTAR ARAHAN</button>
+        </form>
+        <p id="commandStatus" class="status"></p>
+      </div>`;
+    document.body.appendChild(modal);
+
+    $('#closeCommand').onclick = closeCorCommandModal;
+    modal.addEventListener('click', e => { if (e.target === modal) closeCorCommandModal(); });
+    $('#commandTarget').addEventListener('change', updateCorCommandRoute);
+    $('#commandForm').addEventListener('submit', sendCorCommand);
+  }
+
+  const select = $('#commandTarget');
+  select.innerHTML = '<option value="">-- PILIH SUBMODUL --</option>' + corCommandTargets.map(x =>
+    `<option value="${esc(x.id)}">${esc(x.kod)} — ${esc(x.nama || '')}</option>`
+  ).join('');
+  $('#commandStatus').textContent = corCommandTargets.length ? '' : 'Tiada submodul ditemui di bawah COR.';
+  updateCorCommandRoute();
+  modal.classList.remove('hidden');
+  document.body.classList.add('report-modal-open');
+}
+
+function closeCorCommandModal() {
+  $('#corCommandModal')?.classList.add('hidden');
+  document.body.classList.remove('report-modal-open');
+}
+
+function updateCorCommandRoute() {
+  const target = corCommandTargets.find(x => x.id === $('#commandTarget')?.value);
+  if ($('#commandRouteTo')) $('#commandRouteTo').textContent = target ? `${target.kod} — ${target.nama || ''}` : 'PILIH SUBMODUL';
+  if ($('#commandSubmit')) $('#commandSubmit').textContent = target ? `HANTAR ARAHAN KE ${target.kod}` : 'HANTAR ARAHAN';
+}
+
+async function sendCorCommand(e) {
+  e.preventDefault();
+  const status = $('#commandStatus');
+  const target = corCommandTargets.find(x => x.id === $('#commandTarget')?.value);
+  if (!target) { status.textContent = 'Sila pilih submodul penerima.'; return; }
+  if (String(target.kod || '').toUpperCase() === 'BHA') { status.textContent = 'BHA hanya boleh berkomunikasi dengan ICP.'; return; }
+
+  status.textContent = 'Menghantar arahan...';
+  const { error } = await supabase.from('ecor_komunikasi').insert({
+    operasi_id: assignment.operasi_id,
+    pengirim_id: session.user.id,
+    dari_tempat_tugas_id: assignment.tempat_tugas_id,
+    kepada_tempat_tugas_id: target.id,
+    jenis: 'ARAHAN',
+    tajuk: $('#commandTitle').value.trim(),
+    kandungan: $('#commandBody').value.trim(),
+    keutamaan: $('#commandPriority').value,
+    status: 'DIHANTAR'
+  });
+
+  if (error) { status.textContent = error.message; return; }
+  status.textContent = `Arahan berjaya dihantar kepada ${target.kod}.`;
+  $('#commandForm').reset();
+  updateCorCommandRoute();
+  await loadCommunication();
 }
 
 function disableReporting() {
@@ -410,7 +556,7 @@ async function loadCommunication() {
     x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
   );
 
-  $('#instructionCount').textContent = instructions.length;
+  if ($('#instructionCount')) $('#instructionCount').textContent = instructions.length;
   $('#communicationCount').textContent = rows.length;
 
   $('#instructionList').innerHTML = instructions.length
