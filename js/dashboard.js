@@ -131,28 +131,60 @@ function setupCorTopMenu(){
         }
       }
       if(action==='communication-log'){
-        const panel=$('#corCommunicationLogPanel') || $('#historyList')?.closest('section.panel');
-        const list=$('#historyList');
-        if(panel){
-          // FIX 063: buka panel secara paksa. Elak konflik hidden/display:none
-          // daripada setupHistoryToggle() dan style lama Sejarah Komunikasi.
-          panel.hidden=false;
-          panel.removeAttribute('hidden');
-          panel.style.setProperty('display','block','important');
-          if(list){
-            list.hidden=false;
-            list.removeAttribute('hidden');
-            list.style.setProperty('display','block','important');
-          }
-          Promise.resolve(loadCommunication()).finally(()=>{
-            panel.scrollIntoView({behavior:'smooth',block:'start'});
-          });
-        }
+        openCorCommunicationLog();
       }
     });
     document.addEventListener('click',(e)=>{if(!wrap.contains(e.target))closeMenu();});
     document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeMenu();});
   }
+}
+
+
+// ===== FIX 064: LOG KOMUNIKASI COR DALAM POPUP SENDIRI =====
+// Tidak lagi bergantung kepada panel Sejarah Komunikasi asal / atribut hidden.
+async function openCorCommunicationLog(){
+  if(!assignment) return;
+  let modal=$('#corCommunicationLogModal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='corCommunicationLogModal';
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.style.cssText='position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,.74);backdrop-filter:blur(4px);padding:24px;overflow:auto;display:none;';
+    modal.innerHTML=`<section class="panel" style="width:min(1180px,calc(100vw - 32px));margin:40px auto;max-height:calc(100vh - 80px);overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.65)">
+      <div class="section-head" style="position:sticky;top:0;background:#081823;z-index:2;padding-top:8px">
+        <div><p class="eyebrow">LOG KOMUNIKASI</p><h2>Sejarah Komunikasi</h2></div>
+        <div class="adu-actions"><button id="corLogRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corLogClose" type="button" class="ghost">TUTUP ×</button></div>
+      </div>
+      <div id="corCommunicationLogModalList" class="message-list"><p class="muted">Memuatkan sejarah komunikasi...</p></div>
+    </section>`;
+    document.body.appendChild(modal);
+    $('#corLogClose').onclick=closeCorCommunicationLog;
+    $('#corLogRefresh').onclick=()=>loadCorCommunicationLogModal();
+    modal.addEventListener('click',e=>{if(e.target===modal) closeCorCommunicationLog();});
+  }
+  modal.style.display='block';
+  document.body.style.overflow='hidden';
+  await loadCorCommunicationLogModal();
+}
+function closeCorCommunicationLog(){
+  const modal=$('#corCommunicationLogModal');
+  if(modal) modal.style.display='none';
+  document.body.style.overflow='';
+}
+async function loadCorCommunicationLogModal(){
+  const box=$('#corCommunicationLogModalList');
+  if(!box || !assignment) return;
+  box.innerHTML='<p class="muted">Memuatkan sejarah komunikasi...</p>';
+  const {data,error}=await supabase.from('ecor_komunikasi').select(`
+    id,jenis,tajuk,kandungan,keutamaan,status,created_at,
+    pengirim_id,dari_tempat_tugas_id,kepada_tempat_tugas_id,
+    dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
+    kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
+  `).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:false});
+  if(error){box.innerHTML=`<p class="status">${esc(error.message)}</p>`;return;}
+  const rows=(data||[]).filter(x=>x.dari_tempat_tugas_id===assignment.tempat_tugas_id || x.kepada_tempat_tugas_id===assignment.tempat_tugas_id);
+  box.innerHTML=rows.length?rows.map(messageCard).join(''):'<p class="muted">Tiada komunikasi direkodkan.</p>';
 }
 
 function setReportModeForCurrentRoute() {
