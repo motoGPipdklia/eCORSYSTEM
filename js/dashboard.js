@@ -374,15 +374,6 @@ function renderChronology(items) {
     ? chronologyTable(items)
     : '<p class="muted">Tiada laporan atau arahan diterima.</p>';
 }
-function cleanForwardedNote(value) {
-  const text = String(value ?? '').replace(/\r\n/g, '\n').trim();
-  // FIX 050: Rekod lama yang pernah menyimpan metadata forwarding dalam kandungan
-  // tetap dipaparkan bersih pada CATATAN/KRONOLOGI.
-  return text
-    .replace(/^PENGHANTAR ASAL:[^\n]*\nDIMAJUKAN OLEH:[^\n]*\n*/i, '')
-    .trim() || '-';
-}
-
 function chronologyTable(items) {
   const body = items.map((m, index) => {
     const dt = m.created_at ? new Date(m.created_at) : null;
@@ -397,7 +388,7 @@ function chronologyTable(items) {
       <td>${esc(tarikh)}</td>
       <td>${esc(masa)}</td>
       <td><strong>${esc(m.tajuk || '-')}</strong></td>
-      <td>${esc(cleanForwardedNote(m.kandungan))}</td>
+      <td>${esc(m.kandungan || '-')}</td>
       <td><strong>${esc(penghantar)}</strong></td>
     </tr>`;
   }).join('');
@@ -989,7 +980,8 @@ async function forwardReportToParent(source, button) {
   const currentCode=String(assignment.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
   if (!confirm(`Majukan laporan "${source.tajuk||'-'}" dari ${source.dari?.kod||'submodul'} ke ${parentPlace.kod}?`)) return;
   if(button){button.disabled=true;button.textContent='SEDANG DIMAJUKAN...';}
-  const content=cleanForwardedNote(source.kandungan);
+  const origin=source.dari?.kod||'-';
+  const content=`PENGHANTAR ASAL: ${origin}\nDIMAJUKAN OLEH: ${currentCode}\n\n${source.kandungan||''}`;
   const sent=await supabase.from('ecor_komunikasi').insert({operasi_id:assignment.operasi_id,pengirim_id:session.user.id,dari_tempat_tugas_id:assignment.tempat_tugas_id,kepada_tempat_tugas_id:parentPlace.id,jenis:'LAPORAN',tajuk:source.tajuk,kandungan:content,keutamaan:source.keutamaan||'BIASA',status:'DIHANTAR'}).select('id').single();
   if(sent.error){if(button){button.disabled=false;button.textContent='MAJU KE SALURAN ATASAN';}alert(`Gagal memajukan laporan: ${sent.error.message}`);return;}
   const marked=await supabase.from('ecor_komunikasi').update({status:'DIMAJUKAN'}).eq('id',source.id).eq('operasi_id',assignment.operasi_id).eq('kepada_tempat_tugas_id',assignment.tempat_tugas_id).select('id,status').maybeSingle();
@@ -1157,7 +1149,7 @@ async function forwardIcpReport(source, button) {
     kepada_tempat_tugas_id: parentPlace.id,
     jenis: 'LAPORAN',
     tajuk: source.tajuk,
-    kandungan: cleanForwardedNote(source.kandungan),
+    kandungan: `PENGHANTAR ASAL: ${source.dari?.kod || '-'}\nDIMAJUKAN OLEH: ICP\n\n${source.kandungan || ''}`,
     keutamaan: source.keutamaan || 'BIASA',
     status: 'DIHANTAR'
   };
@@ -1546,23 +1538,49 @@ async function loadCorAduStatus(){
   const countAtMovementDest=d=>latestMovement.filter(m=>String(m.status).toUpperCase()==='TIBA'&&String(m.destinasi||'').toUpperCase()===d&&m.dipertemukan_dengan_waris!==true).length;
   const countReunited=latestMovement.filter(m=>m.dipertemukan_dengan_waris===true).length;
   const countPma=countAtMovementDest('PMA');
-  if(summary)summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid">
-    <div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div>
-    <div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div>
-    <div class="adu-summary-item"><small>🟡 3. KUNING</small><strong>${countTag('KUNING')}</strong></div>
-    <div class="adu-summary-item"><small>🟢 4. HIJAU</small><strong>${countTag('HIJAU')}</strong></div>
-    <div class="adu-summary-item gender"><small>5. JANTINA (LELAKI)</small><strong>${countGender('LELAKI')}</strong></div>
-    <div class="adu-summary-item gender"><small>6. JANTINA (WANITA)</small><strong>${countGender('WANITA')}</strong></div>
-    <div class="adu-summary-item gender"><small>7. JANTINA (BELUM DIKENALPASTI)</small><strong>${countGender('BELUM DIKENALPASTI')}</strong></div>
-    <div class="adu-summary-item"><small>8. TRIAGE</small><strong>${countLoc('DALAM_TRIAGE')}</strong></div>
-    <div class="adu-summary-item"><small>9. ADU</small><strong>${countLoc('DALAM_ADU','ADU')}</strong></div>
-    <div class="adu-summary-item"><small>10. BHA</small><strong>${countLoc('BHA')}</strong></div>
-    <div class="adu-summary-item"><small>11. HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
-    <div class="adu-summary-item"><small>12. SRC</small><strong>${countLoc('SRC')}</strong></div>
-    <div class="adu-summary-item"><small>13. PMA</small><strong>${countPma}</strong></div>
-    <div class="adu-summary-item"><small>14. MANGSA DIPERTEMUKAN DENGAN WARIS</small><strong>${countReunited}</strong></div>
-    <div class="adu-summary-item"><small>15. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
-  </div></div>`;
+  const detailRows=(filter)=>{
+    if(filter==='ALL') return rows;
+    if(['PUTIH','MERAH','KUNING','HIJAU'].includes(filter)) return rows.filter(m=>String(m.tag_semasa||'').toUpperCase()===filter);
+    if(filter.startsWith('GENDER:')) return rows.filter(m=>normGender(m.jantina)===filter.slice(7));
+    if(filter==='TRIAGE') return rows.filter(m=>locOf(m)==='DALAM_TRIAGE');
+    if(filter==='ADU') return rows.filter(m=>['DALAM_ADU','ADU'].includes(locOf(m)));
+    if(['BHA','HOSPITAL','SRC'].includes(filter)) return rows.filter(m=>locOf(m)===filter);
+    if(filter==='PMA') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv&&String(mv.status).toUpperCase()==='TIBA'&&String(mv.destinasi||'').toUpperCase()==='PMA'&&mv.dipertemukan_dengan_waris!==true;});
+    if(filter==='REUNITED') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv?.dipertemukan_dengan_waris===true;});
+    return [];
+  };
+  const detailTitle={PUTIH:'PUTIH',MERAH:'MERAH',KUNING:'KUNING',HIJAU:'HIJAU','GENDER:LELAKI':'JANTINA — LELAKI','GENDER:WANITA':'JANTINA — WANITA','GENDER:BELUM DIKENALPASTI':'JANTINA — BELUM DIKENALPASTI',TRIAGE:'TRIAGE',ADU:'ADU',BHA:'BODY HOLDING AREA (BHA)',HOSPITAL:'HOSPITAL',SRC:'SURVIVOR RECEPTION CENTRE (SRC)',PMA:'PRIVATE MATCHING AREA (PMA)',REUNITED:'MANGSA DIPERTEMUKAN DENGAN WARIS',ALL:'JUMLAH MANGSA'};
+  const detailHtml=(filter)=>{
+    const list=detailRows(filter);
+    return `<div class="adu-summary-detail" style="margin-top:18px;border:1px solid rgba(148,163,184,.25);border-radius:16px;overflow:hidden"><div class="section-head" style="padding:16px"><div><p class="eyebrow">BUTIRAN MANGSA</p><h3>${esc(detailTitle[filter]||filter)}</h3><p class="muted">Jumlah: ${list.length}</p></div><button type="button" id="corSummaryDetailClose" class="ghost">TUTUP</button></div>${list.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:900px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${list.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><b>${esc(m.no_mangsa||'-')}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} <span>${esc(m.tag_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-destination">${esc(statusDestinasi(m))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:0 16px 18px">Tiada rekod mangsa dalam kategori ini.</p>'}</div>`;
+  };
+  const tile=(n,label,value,filter,cls='')=>`<button type="button" class="adu-summary-item cor-summary-click ${cls}" data-cor-filter="${esc(filter)}" style="text-align:left;cursor:pointer;border:0;background:transparent;color:inherit;width:100%"><small>${label}</small><strong>${value}</strong></button>`;
+  if(summary){
+    summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3><p class="muted" style="margin:4px 0 0">Klik mana-mana kategori untuk melihat butiran mangsa.</p></div><div class="adu-summary-grid">
+      ${tile(1,'⚪ 1. PUTIH',countTag('PUTIH'),'PUTIH')}
+      ${tile(2,'🔴 2. MERAH',countTag('MERAH'),'MERAH')}
+      ${tile(3,'🟡 3. KUNING',countTag('KUNING'),'KUNING')}
+      ${tile(4,'🟢 4. HIJAU',countTag('HIJAU'),'HIJAU')}
+      ${tile(5,'5. JANTINA (LELAKI)',countGender('LELAKI'),'GENDER:LELAKI','gender')}
+      ${tile(6,'6. JANTINA (WANITA)',countGender('WANITA'),'GENDER:WANITA','gender')}
+      ${tile(7,'7. JANTINA (BELUM DIKENALPASTI)',countGender('BELUM DIKENALPASTI'),'GENDER:BELUM DIKENALPASTI','gender')}
+      ${tile(8,'8. TRIAGE',countLoc('DALAM_TRIAGE'),'TRIAGE')}
+      ${tile(9,'9. ADU',countLoc('DALAM_ADU','ADU'),'ADU')}
+      ${tile(10,'10. BHA',countLoc('BHA'),'BHA')}
+      ${tile(11,'11. HOSPITAL',countLoc('HOSPITAL'),'HOSPITAL')}
+      ${tile(12,'12. SRC',countLoc('SRC'),'SRC')}
+      ${tile(13,'13. PMA',countPma,'PMA')}
+      ${tile(14,'14. MANGSA DIPERTEMUKAN DENGAN WARIS',countReunited,'REUNITED')}
+      ${tile(15,'15. JUMLAH MANGSA',rows.length,'ALL')}
+    </div><div id="corSummaryDetail"></div></div>`;
+    summary.querySelectorAll('[data-cor-filter]').forEach(btn=>btn.addEventListener('click',()=>{
+      const detail=summary.querySelector('#corSummaryDetail');
+      if(!detail)return;
+      detail.innerHTML=detailHtml(btn.dataset.corFilter);
+      detail.querySelector('#corSummaryDetailClose')?.addEventListener('click',()=>{detail.innerHTML='';});
+      detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }));
+  }
   if(status)status.textContent=`Status mangsa keseluruhan terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
