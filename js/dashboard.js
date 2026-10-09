@@ -700,6 +700,14 @@ function renderChronology(items) {
     ? chronologyTable(items)
     : '<p class="muted">Tiada laporan atau arahan diterima.</p>';
 }
+function cleanChronologyNote(value) {
+  return String(value || '')
+    .replace(/^\s*PENGHANTAR ASAL\s*:\s*[^\r\n]*[\r\n]+/i, '')
+    .replace(/^\s*DIMAJUKAN OLEH\s*:\s*[^\r\n]*[\r\n]*/i, '')
+    .replace(/^\s+/, '')
+    .trim();
+}
+
 function chronologyTable(items) {
   const body = items.map((m, index) => {
     const dt = m.created_at ? new Date(m.created_at) : null;
@@ -714,7 +722,7 @@ function chronologyTable(items) {
       <td>${esc(tarikh)}</td>
       <td>${esc(masa)}</td>
       <td><strong>${esc(m.tajuk || '-')}</strong></td>
-      <td>${esc(m.kandungan || '-')}</td>
+      <td>${esc(cleanChronologyNote(m.kandungan) || '-')}</td>
       <td><strong>${esc(penghantar)}</strong></td>
     </tr>`;
   }).join('');
@@ -1328,7 +1336,7 @@ async function forwardReportToParent(source, button) {
   if (!confirm(`Majukan laporan "${source.tajuk||'-'}" dari ${source.dari?.kod||'submodul'} ke ${parentPlace.kod}?`)) return;
   if(button){button.disabled=true;button.textContent='SEDANG DIMAJUKAN...';}
   const origin=source.dari?.kod||'-';
-  const content=`PENGHANTAR ASAL: ${origin}\nDIMAJUKAN OLEH: ${currentCode}\n\n${source.kandungan||''}`;
+  const content=String(source.kandungan||'').replace(/^\s*PENGHANTAR ASAL\s*:\s*[^\r\n]*[\r\n]+/i,'').replace(/^\s*DIMAJUKAN OLEH\s*:\s*[^\r\n]*[\r\n]*/i,'').trim();
   const sent=await supabase.from('ecor_komunikasi').insert({operasi_id:assignment.operasi_id,pengirim_id:session.user.id,dari_tempat_tugas_id:assignment.tempat_tugas_id,kepada_tempat_tugas_id:parentPlace.id,jenis:'LAPORAN',tajuk:source.tajuk,kandungan:content,keutamaan:source.keutamaan||'BIASA',status:'DIHANTAR'}).select('id').single();
   if(sent.error){if(button){button.disabled=false;button.textContent='MAJU KE SALURAN ATASAN';}alert(`Gagal memajukan laporan: ${sent.error.message}`);return;}
   const marked=await supabase.from('ecor_komunikasi').update({status:'DIMAJUKAN'}).eq('id',source.id).eq('operasi_id',assignment.operasi_id).eq('kepada_tempat_tugas_id',assignment.tempat_tugas_id).select('id,status').maybeSingle();
@@ -1496,7 +1504,7 @@ async function forwardIcpReport(source, button) {
     kepada_tempat_tugas_id: parentPlace.id,
     jenis: 'LAPORAN',
     tajuk: source.tajuk,
-    kandungan: `PENGHANTAR ASAL: ${source.dari?.kod || '-'}\nDIMAJUKAN OLEH: ICP\n\n${source.kandungan || ''}`,
+    kandungan: String(source.kandungan || '').replace(/^\s*PENGHANTAR ASAL\s*:\s*[^\r\n]*[\r\n]+/i,'').replace(/^\s*DIMAJUKAN OLEH\s*:\s*[^\r\n]*[\r\n]*/i,'').trim(),
     keutamaan: source.keutamaan || 'BIASA',
     status: 'DIHANTAR'
   };
