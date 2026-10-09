@@ -144,6 +144,7 @@ async function loadAssignment() {
   await renderAduModule();
   await renderTriageModule();
   await renderSrcModule();
+  await renderPmaModule();
   await renderVictimMovementPanel();
   await renderCorAduStatus();
 }
@@ -965,7 +966,41 @@ async function confirmVictimArrival(m){
   const ex=await supabase.from('ecor_src_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return}
   const payload={nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_masuk_src:m.tag_semasa,tag_src_semasa:m.tag_semasa,catatan:m.catatan||null,status_lokasi:'DALAM_SRC',masa_terima_src:now,masa_tiba_src:now,disahkan_tiba_oleh:session.user.id};const a=ex.data?await supabase.from('ecor_src_mangsa').update(payload).eq('id',ex.data.id):await supabase.from('ecor_src_mangsa').insert({...payload,operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,sumber_asal:m.asal,didaftarkan_oleh:session.user.id});if(a.error){alert(a.error.message);return}
  }
- const q=await supabase.from('ecor_pergerakan_mangsa').update({status:'TIBA',masa_tiba:now,disahkan_tiba_oleh:session.user.id}).eq('id',m.id).eq('status','DALAM_PERJALANAN').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Rekod pergerakan telah dikemas kini oleh petugas lain.');return}alert(`${m.no_mangsa} telah disahkan tiba di ${code}.`);await loadVictimMovements();if(code==='ADU')await loadAduData();if(code==='SRC')await loadSrcData();
+ const q=await supabase.from('ecor_pergerakan_mangsa').update({status:'TIBA',masa_tiba:now,disahkan_tiba_oleh:session.user.id}).eq('id',m.id).eq('status','DALAM_PERJALANAN').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Rekod pergerakan telah dikemas kini oleh petugas lain.');return}alert(`${m.no_mangsa} telah disahkan tiba di ${code}.`);await loadVictimMovements();if(code==='ADU')await loadAduData();if(code==='SRC')await loadSrcData();if(code==='PMA')await loadPmaData();
+}
+
+// ===== FIX 039: PMA — PERTEMUAN MANGSA DENGAN WARIS =====
+const isPmaSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='PMA' &&
+  String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
+
+async function renderPmaModule(){
+  $('#pmaPanel')?.remove(); if(!isPmaSupervisor())return; ensureAduStyles();
+  const p=document.createElement('section'); p.id='pmaPanel'; p.className='panel';
+  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PRIVATE MATCHING AREA</p><h2>PMA — Pertemuan Mangsa & Waris</h2><p class="muted">Mangsa yang telah disahkan tiba di PMA boleh ditandakan selepas dipertemukan dengan waris.</p></div><button id="pmaRefresh" class="ghost">MUAT SEMULA</button></div>
+  <div class="adu-metrics"><div class="adu-metric"><small>DALAM PERJALANAN</small><strong id="pmaTravel">0</strong></div><div class="adu-metric"><small>DALAM PMA</small><strong id="pmaInside">0</strong></div><div class="adu-metric"><small>DIPERTEMUKAN DENGAN WARIS</small><strong id="pmaReunited">0</strong></div></div>
+  <div id="pmaList"><p class="muted">Memuatkan rekod PMA...</p></div><p id="pmaStatus" class="status"></p>`;
+  document.querySelector('main').appendChild(p); $('#pmaRefresh').onclick=loadPmaData; await loadPmaData();
+}
+
+async function loadPmaData(){
+  if(!isPmaSupervisor())return;
+  const q=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('destinasi','PMA').order('masa_bertolak',{ascending:false});
+  const box=$('#pmaList'),st=$('#pmaStatus'); if(q.error){if(box)box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
+  const rows=q.data||[], travelling=rows.filter(x=>String(x.status).toUpperCase()==='DALAM_PERJALANAN'), arrived=rows.filter(x=>String(x.status).toUpperCase()==='TIBA');
+  const reunited=arrived.filter(x=>x.dipertemukan_dengan_waris===true);
+  $('#pmaTravel').textContent=travelling.length; $('#pmaInside').textContent=arrived.length-reunited.length; $('#pmaReunited').textContent=reunited.length;
+  box.innerHTML=arrived.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1050px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>TAG</th><th>MASA TIBA</th><th>STATUS</th><th>MASA PERTEMUAN</th><th>TINDAKAN</th></tr></thead><tbody>${arrived.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(fmt(m.masa_tiba))}</td><td class="adu-destination">${m.dipertemukan_dengan_waris===true?'DIPERTEMUKAN DENGAN WARIS':'DALAM PMA'}</td><td>${m.masa_dipertemukan_waris?esc(fmt(m.masa_dipertemukan_waris)):'-'}</td><td>${m.dipertemukan_dengan_waris===true?'<span class="adu-status-active"><b>SELESAI</b></span>':`<button data-reunite="${m.id}">MANGSA DIPERTEMUKAN DENGAN WARIS</button>`}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Belum ada mangsa yang disahkan tiba di PMA.</p>';
+  box.querySelectorAll('[data-reunite]').forEach(b=>b.onclick=()=>confirmPmaReunion(arrived.find(x=>x.id===b.dataset.reunite)));
+  if(st)st.textContent=`${arrived.length-reunited.length} mangsa dalam PMA • ${reunited.length} mangsa telah dipertemukan dengan waris.`;
+}
+
+async function confirmPmaReunion(m){
+  if(!m||m.dipertemukan_dengan_waris===true)return;
+  if(!confirm(`Sahkan ${m.no_mangsa} telah DIPERTEMUKAN DENGAN WARIS di PMA?`))return;
+  const now=new Date().toISOString();
+  const q=await supabase.from('ecor_pergerakan_mangsa').update({dipertemukan_dengan_waris:true,masa_dipertemukan_waris:now,dipertemukan_oleh:session.user.id}).eq('id',m.id).eq('destinasi','PMA').eq('status','TIBA').select('id').maybeSingle();
+  if(q.error||!q.data){alert(q.error?.message||'Rekod PMA tidak dapat dikemas kini.');return}
+  alert(`${m.no_mangsa} telah direkodkan DIPERTEMUKAN DENGAN WARIS.`); await loadPmaData(); await loadVictimMovements();
 }
 
 // ===== ADU FASA 3 =====
@@ -1102,7 +1137,7 @@ async function renderCorAduStatus(){
   p.className='panel';
   p.hidden=true;
   p.style.setProperty('display','none','important');
-  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — status terkini setiap mangsa berdasarkan rekod TRIAGE dan ADU, termasuk mangsa ke SRC, BHA dan Hospital. Mangsa yang sama dikira sekali sahaja.</p></div><div class="adu-actions"><button id="corAduRefresh" class="ghost">MUAT SEMULA</button><button id="corAduClose" class="ghost">TUTUP</button></div></div>
+  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — status terkini setiap mangsa berdasarkan rekod TRIAGE dan ADU, termasuk mangsa ke SRC, BHA, Hospital dan PMA serta status pertemuan dengan waris. Mangsa yang sama dikira sekali sahaja.</p></div><div class="adu-actions"><button id="corAduRefresh" class="ghost">MUAT SEMULA</button><button id="corAduClose" class="ghost">TUTUP</button></div></div>
   <div id="corAduTable"><p class="muted">Tekan MANGSA KESELURUHAN untuk memaparkan data.</p></div>
   <div id="corAduSummary"></div>
   <p id="corAduStatus" class="status"></p>`;
@@ -1189,7 +1224,7 @@ async function loadCorAduStatus(){
   const movementByVictim=new Map();
   (movementQ.data||[]).forEach(x=>{const k=String(x.no_mangsa||'').trim().toUpperCase();if(k&&!movementByVictim.has(k))movementByVictim.set(k,x);});
   const statusDestinasi=m=>{
-    const mv=movementByVictim.get(normKey(m)); if(mv)return String(mv.status).toUpperCase()==='TIBA'?`TELAH TIBA DI ${String(mv.destinasi||'-').toUpperCase()}`:movementLabel(mv.destinasi);
+    const mv=movementByVictim.get(normKey(m)); if(mv){if(mv.dipertemukan_dengan_waris===true)return 'DIPERTEMUKAN DENGAN WARIS';return String(mv.status).toUpperCase()==='TIBA'?`TELAH TIBA DI ${String(mv.destinasi||'-').toUpperCase()}`:movementLabel(mv.destinasi);}
     const loc=locOf(m);
     if(loc==='DALAM_TRIAGE')return 'DALAM TRIAGE';
     if(loc==='DALAM_ADU'||loc==='ADU')return 'DALAM ADU';
@@ -1204,6 +1239,10 @@ async function loadCorAduStatus(){
   const countTag=t=>rows.filter(m=>String(m.tag_semasa||'').toUpperCase()===t).length;
   const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
   const countLoc=(...locs)=>rows.filter(m=>locs.includes(locOf(m))).length;
+  const latestMovement=[...movementByVictim.values()];
+  const countAtMovementDest=d=>latestMovement.filter(m=>String(m.status).toUpperCase()==='TIBA'&&String(m.destinasi||'').toUpperCase()===d&&m.dipertemukan_dengan_waris!==true).length;
+  const countReunited=latestMovement.filter(m=>m.dipertemukan_dengan_waris===true).length;
+  const countPma=countAtMovementDest('PMA');
   if(summary)summary.innerHTML=`<div class="adu-summary"><div class="adu-summary-title"><h3>JUMLAH KESELURUHAN</h3></div><div class="adu-summary-grid">
     <div class="adu-summary-item"><small>⚪ 1. PUTIH</small><strong>${countTag('PUTIH')}</strong></div>
     <div class="adu-summary-item"><small>🔴 2. MERAH</small><strong>${countTag('MERAH')}</strong></div>
@@ -1217,7 +1256,9 @@ async function loadCorAduStatus(){
     <div class="adu-summary-item"><small>10. BHA</small><strong>${countLoc('BHA')}</strong></div>
     <div class="adu-summary-item"><small>11. HOSPITAL</small><strong>${countLoc('HOSPITAL')}</strong></div>
     <div class="adu-summary-item"><small>12. SRC</small><strong>${countLoc('SRC')}</strong></div>
-    <div class="adu-summary-item"><small>13. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
+    <div class="adu-summary-item"><small>13. PMA</small><strong>${countPma}</strong></div>
+    <div class="adu-summary-item"><small>14. MANGSA DIPERTEMUKAN DENGAN WARIS</small><strong>${countReunited}</strong></div>
+    <div class="adu-summary-item"><small>15. JUMLAH MANGSA</small><strong>${rows.length}</strong></div>
   </div></div>`;
   if(status)status.textContent=`Status mangsa keseluruhan terkini. Jumlah mangsa: ${rows.length}.`;
 }
