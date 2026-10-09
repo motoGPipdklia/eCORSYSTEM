@@ -37,7 +37,7 @@ function setupCorTopMenu(){
           <button type="button" class="cor-menu-chart" aria-haspopup="true" aria-expanded="false">CARTA <span>▶</span></button>
           <div class="cor-menu-submenu" id="corChartSubmenu" hidden>
             <button type="button" data-cor-menu="chronology">KRONOLOGI</button>
-            <button type="button" data-cor-menu="victims">MANGSA KESELURUHAN</button>
+            <button type="button" data-cor-menu="victims">MANGSA</button>
           </div>
         </div>
         <button type="button" data-cor-menu="movement">PERGERAKAN MANGSA</button>
