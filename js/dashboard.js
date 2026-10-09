@@ -455,18 +455,18 @@ function messageCard(m) {
   </article>`;
 }
 
-$('#openReport').addEventListener('click', () => {
+$('#openReport')?.addEventListener('click', () => {
   if (!assignment || !parentPlace) return;
   setReportModeForCurrentRoute();
   $('#reportPanel').classList.remove('hidden');
   $('#reportPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
-$('#closeReport').addEventListener('click', () => {
+$('#closeReport')?.addEventListener('click', () => {
   $('#reportPanel').classList.add('hidden');
 });
 
-$('#reportForm').addEventListener('submit', async (e) => {
+$('#reportForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
 
   const s = $('#reportStatus');
@@ -504,9 +504,9 @@ $('#reportForm').addEventListener('submit', async (e) => {
   await loadCommunication();
 });
 
-$('#reload').addEventListener('click', loadAssignment);
+$('#reload')?.addEventListener('click', loadAssignment);
 
-$('#logout').addEventListener('click', async () => {
+$('#logout')?.addEventListener('click', async () => {
   await supabase.auth.signOut();
   location.replace('index.html');
 });
@@ -1631,5 +1631,12 @@ async function showSrcHistory(m){
  const q=await supabase.from('ecor_src_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return} alert(`SEJARAH TAG SRC — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
 }
 
-// FIX 019: mula aplikasi hanya selepas semua const/fungsi modul ADU selesai diinisialisasi.
-await boot();
+// FIX 041: boot dashboard secara selamat selepas keseluruhan modul selesai diinisialisasi.
+// Ralat modul tambahan tidak lagi dibiarkan senyap; mesej dipaparkan pada #status.
+try {
+  await boot();
+} catch (err) {
+  console.error('eCOR dashboard boot gagal:', err);
+  const statusBox = document.querySelector('#status');
+  if (statusBox) statusBox.textContent = `Dashboard gagal dimulakan: ${err?.message || err}`;
+}
