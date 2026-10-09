@@ -25,6 +25,30 @@ function setupCorTopMenu(){
   if(chronologyBtn) chronologyBtn.style.display='none';
   if(victimBtn) victimBtn.style.display='none';
 
+  // FIX 061: LOG KOMUNIKASI COR berfungsi seperti PERGERAKAN MANGSA.
+  // Panel Sejarah Komunikasi ditutup secara default dan hanya dibuka melalui menu ⋮.
+  const historyList=$('#historyList');
+  const historyPanel=historyList?.closest('section.panel');
+  const historyHead=historyPanel?.querySelector('.history-section-head');
+  const oldHistoryToggle=$('#toggleHistory');
+  if(historyPanel){
+    historyPanel.id='corCommunicationLogPanel';
+    historyPanel.hidden=true;
+  }
+  if(historyList){
+    historyList.hidden=false;
+    historyList.style.display='';
+  }
+  if(oldHistoryToggle) oldHistoryToggle.style.display='none';
+  if(historyHead && !historyHead.querySelector('#corCommunicationLogRefresh')){
+    const actions=document.createElement('div');
+    actions.className='adu-actions';
+    actions.innerHTML=`<button id="corCommunicationLogRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corCommunicationLogClose" type="button" class="ghost">TUTUP</button>`;
+    historyHead.appendChild(actions);
+    $('#corCommunicationLogRefresh').onclick=async()=>{await loadCommunication();};
+    $('#corCommunicationLogClose').onclick=()=>{historyPanel.hidden=true;};
+  }
+
   let wrap=$('#corTopMenu');
   if(!wrap){
     wrap=document.createElement('div');
@@ -103,13 +127,13 @@ function setupCorTopMenu(){
         }
       }
       if(action==='communication-log'){
-        const historyList=$('#historyList');
-        const historyToggle=$('#toggleHistory');
-        const historyPanel=historyList?.closest('section.panel');
-        if(historyList && historyToggle){
-          const isClosed=historyList.hidden || historyList.style.display==='none';
-          if(isClosed) historyToggle.click();
-          historyPanel?.scrollIntoView({behavior:'smooth',block:'start'});
+        const panel=$('#corCommunicationLogPanel') || $('#historyList')?.closest('section.panel');
+        const list=$('#historyList');
+        if(panel){
+          panel.hidden=false;
+          if(list){list.hidden=false;list.style.display='';}
+          loadCommunication();
+          panel.scrollIntoView({behavior:'smooth',block:'start'});
         }
       }
     });
