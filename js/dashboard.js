@@ -144,6 +144,7 @@ async function loadAssignment() {
   await renderAduModule();
   await renderTriageModule();
   await renderSrcModule();
+  await renderVictimMovementPanel();
   await renderCorAduStatus();
 }
 
@@ -930,6 +931,38 @@ async function forwardIcpReport(source, button) {
   await loadCommunication();
 }
 
+// ===== FIX 035: PERGERAKAN MANGSA BERPUSAT =====
+const movementCodes=['TRIAGE','ADU','SRC','BHA'];
+const movementLabel=d=>({SRC:'MANGSA DALAM PERJALANAN KE SRC',ADU:'MANGSA DALAM PERJALANAN KE ADU',HOSPITAL:'MANGSA DALAM PERJALANAN KE HOSPITAL',BHA:'MANGSA KE BHA'})[String(d||'').toUpperCase()]||`MANGSA DALAM PERJALANAN KE ${String(d||'-').toUpperCase()}`;
+async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
+ const payload={operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||null,asal:String(asal).toUpperCase(),destinasi:String(destinasi).toUpperCase(),destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
+ const q=await supabase.from('ecor_pergerakan_mangsa').insert(payload).select('id').single();
+ if(q.error){alert(`Gagal merekod pergerakan mangsa: ${q.error.message}`);return null} return q.data;
+}
+function movementDuration(v){if(!v)return'-';const ms=Date.now()-new Date(v).getTime();if(!Number.isFinite(ms)||ms<0)return'-';const min=Math.floor(ms/60000),h=Math.floor(min/60);return h?`${h} jam ${min%60} minit`:`${min} minit`;}
+async function renderVictimMovementPanel(){
+ $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
+ const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Notifikasi perjalanan mangsa antara TRIAGE, ADU, SRC, HOSPITAL dan BHA. Lokasi penerima perlu mengesahkan ketibaan.</p></div><button id="movementRefresh" class="ghost">MUAT SEMULA</button></div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
+ const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements; await loadVictimMovements();
+}
+async function loadVictimMovements(){
+ const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; const q=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}); const box=$('#movementList');if(!box)return;if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const rows=q.data||[];
+ box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1100px"><thead><tr><th>BIL</th><th>NOTIFIKASI</th><th>ID MANGSA</th><th>TAG</th><th>ASAL</th><th>DESTINASI</th><th>MASA BERTOLAK</th><th>TEMPOH</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td><strong>${esc(movementLabel(m.destinasi))}</strong></td><td><b>${esc(m.no_mangsa)}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(m.asal)}</td><td>${esc(m.destinasi_nama||m.destinasi)}</td><td>${esc(fmt(m.masa_bertolak))}</td><td>${esc(movementDuration(m.masa_bertolak))}</td><td>${esc(m.catatan||'-')}</td><td>${m.destinasi===code?`<button data-confirm-move="${m.id}">SAHKAN TIBA DI ${esc(code)}</button>`:'<span class="muted">DALAM PERJALANAN</span>'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa dalam perjalanan.</p>';
+ box.querySelectorAll('[data-confirm-move]').forEach(b=>b.onclick=()=>confirmVictimArrival(rows.find(x=>x.id===b.dataset.confirmMove)));
+}
+async function confirmVictimArrival(m){
+ const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();if(!m||m.destinasi!==code)return;if(!confirm(`Sahkan ${m.no_mangsa} telah TIBA di ${code}?`))return;const now=new Date().toISOString();
+ if(code==='ADU'){
+  const ex=await supabase.from('ecor_adu_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return}
+  const payload={nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_triage:m.tag_semasa,tag_adu_semasa:m.tag_semasa,catatan:m.catatan||null,status_lokasi:'DALAM_ADU',destinasi:null,masa_terima_adu:now,masa_keluar_adu:null,catatan_pemindahan:null};const a=ex.data?await supabase.from('ecor_adu_mangsa').update(payload).eq('id',ex.data.id):await supabase.from('ecor_adu_mangsa').insert({...payload,operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,didaftarkan_oleh:session.user.id});if(a.error){alert(a.error.message);return}
+ }
+ if(code==='SRC'){
+  const ex=await supabase.from('ecor_src_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return}
+  const payload={nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_masuk_src:m.tag_semasa,tag_src_semasa:m.tag_semasa,catatan:m.catatan||null,status_lokasi:'DALAM_SRC',masa_terima_src:now,masa_tiba_src:now,disahkan_tiba_oleh:session.user.id};const a=ex.data?await supabase.from('ecor_src_mangsa').update(payload).eq('id',ex.data.id):await supabase.from('ecor_src_mangsa').insert({...payload,operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,sumber_asal:m.asal,didaftarkan_oleh:session.user.id});if(a.error){alert(a.error.message);return}
+ }
+ const q=await supabase.from('ecor_pergerakan_mangsa').update({status:'TIBA',masa_tiba:now,disahkan_tiba_oleh:session.user.id}).eq('id',m.id).eq('status','DALAM_PERJALANAN').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Rekod pergerakan telah dikemas kini oleh petugas lain.');return}alert(`${m.no_mangsa} telah disahkan tiba di ${code}.`);await loadVictimMovements();if(code==='ADU')await loadAduData();if(code==='SRC')await loadSrcData();
+}
+
 // ===== ADU FASA 3 =====
 const ADU_TAGS=['PUTIH','MERAH','KUNING','HIJAU'];
 const aduLabel=t=>({PUTIH:'Putih — Meninggal Dunia',MERAH:'Merah — Cedera Parah',KUNING:'Kuning — Cedera Ringan',HIJAU:'Hijau — Tiada Kecederaan'})[t]||t;
@@ -1024,9 +1057,9 @@ async function transferAduVictim(m){
 
 async function moveAduVictim(m,statusLokasi,destinasi,note=''){
  if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari ADU ke ${destinasi}?`))return;
+ if(['SRC','HOSPITAL','BHA'].includes(statusLokasi)){const mv=await createVictimMovement(m,'ADU',statusLokasi,destinasi,note);if(!mv)return;}
  const q=await supabase.from('ecor_adu_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_adu:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);
- if(q.error){alert(q.error.message);return}
- alert(`Mangsa berjaya dikeluarkan dari ADU ke ${destinasi}.`); await loadAduData();
+ if(q.error){alert(q.error.message);return}alert(`Mangsa ${m.no_mangsa} kini ${movementLabel(statusLokasi)}.`);await loadAduData();await loadVictimMovements();
 }
 async function showAduHistory(m){
  const q=await supabase.from('ecor_adu_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');
@@ -1115,17 +1148,18 @@ async function renderCorAduStatus(){
 async function loadCorAduStatus(){
   if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='COR') return;
 
-  const [triageQ,aduQ]=await Promise.all([
+  const [triageQ,aduQ,movementQ]=await Promise.all([
     supabase.from('ecor_triage_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,masa_keluar_triage,catatan_pemindahan')
       .eq('operasi_id',assignment.operasi_id),
     supabase.from('ecor_adu_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
-      .eq('operasi_id',assignment.operasi_id)
+      .eq('operasi_id',assignment.operasi_id),
+    supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('status','DALAM_PERJALANAN')
   ]);
 
   const box=$('#corAduTable'),summary=$('#corAduSummary'),status=$('#corAduStatus');
-  const err=triageQ.error||aduQ.error;
+  const err=triageQ.error||aduQ.error||movementQ.error;
   if(err){if(box)box.innerHTML=`<p class="status">${esc(err.message)}</p>`;if(status)status.textContent=err.message;return;}
 
   const normGender=v=>{const x=String(v||'').trim().toUpperCase();if(x==='LELAKI')return 'LELAKI';if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA';return 'BELUM DIKENALPASTI';};
@@ -1147,7 +1181,9 @@ async function loadCorAduStatus(){
   (aduQ.data||[]).forEach(m=>consider(m,'ADU'));
   const rows=[...latest.values()].sort((a,b)=>a._masa-b._masa);
 
+  const movementByVictim=new Map((movementQ.data||[]).map(x=>[String(x.no_mangsa||'').trim().toUpperCase(),x]));
   const statusDestinasi=m=>{
+    const mv=movementByVictim.get(normKey(m)); if(mv)return movementLabel(mv.destinasi);
     const loc=locOf(m);
     if(loc==='DALAM_TRIAGE')return 'DALAM TRIAGE';
     if(loc==='DALAM_ADU'||loc==='ADU')return 'DALAM ADU';
@@ -1437,11 +1473,8 @@ async function transferTriageVictim(m){
 }
 async function moveTriageVictim(m,statusLokasi,destinasi,note=''){
  if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari TRIAGE ke ${destinasi}?`))return;
- if(statusLokasi==='ADU'){
-  const ex=await supabase.from('ecor_adu_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return}
-  if(!ex.data){const a=await supabase.from('ecor_adu_mangsa').insert({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_triage:m.tag_triage,tag_adu_semasa:m.tag_triage,catatan:note.trim()||m.catatan||null,didaftarkan_oleh:session.user.id,status_lokasi:'DALAM_ADU'});if(a.error){alert(`Gagal menghantar rekod ke ADU: ${a.error.message}`);return}}
- }
- const q=await supabase.from('ecor_triage_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_triage:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id);if(q.error){alert(q.error.message);return}alert(`Mangsa berjaya dipindahkan ke ${destinasi}.`);await loadTriageData();
+ const mv=await createVictimMovement(m,'TRIAGE',statusLokasi,destinasi,note);if(!mv)return;
+ const q=await supabase.from('ecor_triage_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_triage:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id);if(q.error){alert(q.error.message);return}alert(`Mangsa ${m.no_mangsa} kini ${movementLabel(statusLokasi)}.`);await loadTriageData();await loadVictimMovements();
 }
 async function showTriageHistory(m){
  const q=await supabase.from('ecor_triage_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return}
@@ -1462,22 +1495,7 @@ async function renderSrcModule(){
  document.querySelector('main').appendChild(p); $('#srcRefresh').onclick=loadSrcData; await loadSrcData();
 }
 
-async function syncSrcIncoming(){
- if(!isSrcSupervisor())return;
- const [tq,aq]=await Promise.all([
-  supabase.from('ecor_triage_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('status_lokasi','SRC'),
-  supabase.from('ecor_adu_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('status_lokasi','SRC')
- ]);
- if(tq.error)throw tq.error;if(aq.error)throw aq.error;
- const incoming=[];
- for(const m of tq.data||[])incoming.push({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_masuk_src:m.tag_triage,tag_src_semasa:m.tag_triage,sumber_asal:'TRIAGE',sumber_rekod_id:m.id,catatan:m.catatan_pemindahan||m.catatan||null,status_lokasi:'DALAM_PERJALANAN',masa_bertolak_src:m.masa_keluar_triage||null});
- for(const m of aq.data||[])incoming.push({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_masuk_src:m.tag_adu_semasa||m.tag_triage,tag_src_semasa:m.tag_adu_semasa||m.tag_triage,sumber_asal:'ADU',sumber_rekod_id:m.id,catatan:m.catatan_pemindahan||m.catatan||null,status_lokasi:'DALAM_PERJALANAN',masa_bertolak_src:m.masa_keluar_adu||null});
- for(const row of incoming){
-  const ex=await supabase.from('ecor_src_mangsa').select('id,status_lokasi').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',row.no_mangsa).maybeSingle();
-  if(ex.error)throw ex.error;
-  if(!ex.data){const ins=await supabase.from('ecor_src_mangsa').insert({...row,didaftarkan_oleh:session.user.id});if(ins.error)throw ins.error;}
- }
-}
+async function syncSrcIncoming(){ return; }
 
 function srcTravelDuration(v){
  if(!v)return '-'; const ms=Date.now()-new Date(v).getTime(); if(!Number.isFinite(ms)||ms<0)return '-';
@@ -1532,10 +1550,10 @@ async function transferSrcVictim(m){
 }
 
 async function moveSrcVictim(m,statusLokasi,destinasi,note=''){
- if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari SRC ke ${destinasi}?`))return; if(statusLokasi==='ADU'){ const ex=await supabase.from('ecor_adu_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return} const payload={nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_triage:m.tag_masuk_src,tag_adu_semasa:m.tag_src_semasa,catatan:note.trim()||m.catatan||null,status_lokasi:'DALAM_ADU',destinasi:null,masa_keluar_adu:null,catatan_pemindahan:null}; const a=ex.data?await supabase.from('ecor_adu_mangsa').update({...payload,masa_terima_adu:new Date().toISOString()}).eq('id',ex.data.id):await supabase.from('ecor_adu_mangsa').insert({...payload,operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,didaftarkan_oleh:session.user.id});if(a.error){alert(`Gagal menghantar rekod ke ADU: ${a.error.message}`);return} }
- const q=await supabase.from('ecor_src_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_src:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return}alert(`Mangsa berjaya dipindahkan ke ${destinasi}.`);await loadSrcData();
+ if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari SRC ke ${destinasi}?`))return;
+ if(['ADU','HOSPITAL','BHA'].includes(statusLokasi)){const mv=await createVictimMovement(m,'SRC',statusLokasi,destinasi,note);if(!mv)return;}
+ const q=await supabase.from('ecor_src_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_src:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return}alert(statusLokasi==='PMA'?`Mangsa berjaya dipindahkan ke ${destinasi}.`:`Mangsa ${m.no_mangsa} kini ${movementLabel(statusLokasi)}.`);await loadSrcData();await loadVictimMovements();
 }
-
 async function showSrcHistory(m){
  const q=await supabase.from('ecor_src_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return} alert(`SEJARAH TAG SRC — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
 }
