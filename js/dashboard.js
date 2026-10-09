@@ -551,13 +551,29 @@ async function loadCommunication() {
       return (from === 'BHA' && to === 'COR') || (from === 'COR' && to === 'BHA');
     });
   }
+  // FIX 068: ringkasan komunikasi yang BELUM DIBACA sahaja.
+  // Status DIHANTAR / BARU dianggap belum dibaca. DALAM_TINDAKAN dan DITERIMA tidak dikira.
+  const unreadStatuses = new Set(['DIHANTAR', 'BARU']);
+  const unreadReports = rows.filter(x =>
+    x.jenis === 'LAPORAN' &&
+    x.kepada_tempat_tugas_id === assignment.tempat_tugas_id &&
+    unreadStatuses.has(String(x.status || '').trim().toUpperCase())
+  );
+  const unreadInstructions = rows.filter(x =>
+    x.jenis === 'ARAHAN' &&
+    x.kepada_tempat_tugas_id === assignment.tempat_tugas_id &&
+    unreadStatuses.has(String(x.status || '').trim().toUpperCase())
+  );
+
   const instructions = rows.filter(x =>
     (x.jenis === 'ARAHAN' || x.jenis === 'MAKLUM_BALAS') &&
     x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
   );
 
   if ($('#instructionCount')) $('#instructionCount').textContent = instructions.length;
-  $('#communicationCount').textContent = rows.length;
+  if ($('#communicationCount')) $('#communicationCount').textContent = rows.length;
+  if ($('#unreadReportCount')) $('#unreadReportCount').textContent = unreadReports.length;
+  if ($('#unreadInstructionCount')) $('#unreadInstructionCount').textContent = unreadInstructions.length;
 
   $('#instructionList').innerHTML = instructions.length
     ? instructionTable(instructions)
