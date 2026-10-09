@@ -1447,15 +1447,16 @@ async function showTriageHistory(m){
  const q=await supabase.from('ecor_triage_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return}
  alert(`SEJARAH TAG TRIAGE — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
 }
-// ===== FIX 031: SURVIVOR RECEPTION CENTRE (SRC) =====
+// ===== FIX 032: SRC — SAHKAN MANGSA TIBA =====
 const isSrcSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='SRC' &&
  String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
 
 async function renderSrcModule(){
  $('#srcPanel')?.remove(); if(!isSrcSupervisor())return; ensureAduStyles();
  const p=document.createElement('section'); p.id='srcPanel'; p.className='panel';
- p.innerHTML=`<div class="section-head"><div><p class="eyebrow">SURVIVOR RECEPTION CENTRE</p><h2>SRC — Pengurusan Mangsa</h2><p class="muted">Mangsa kad HIJAU / KUNING dikumpulkan di SRC untuk penilaian semula dan dokumentasi Pasukan Siasatan sebelum ke PRIVATE MATCHING AREA (PMA).</p></div><button id="srcRefresh" class="ghost">MUAT SEMULA</button></div>
- <div class="adu-metrics"><div class="adu-metric"><small>HIJAU</small><strong id="srcHijau">0</strong></div><div class="adu-metric"><small>KUNING</small><strong id="srcKuning">0</strong></div><div class="adu-metric"><small>DOKUMENTASI SELESAI</small><strong id="srcDokSelesai">0</strong></div><div class="adu-metric"><small>MENUNGGU PMA</small><strong id="srcTungguPma">0</strong></div><div class="adu-metric"><small>JUMLAH DALAM SRC</small><strong id="srcJumlah">0</strong></div></div>
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">SURVIVOR RECEPTION CENTRE</p><h2>SRC — Pengurusan Mangsa</h2><p class="muted">Mangsa yang dihantar dari TRIAGE / ADU mesti disahkan tiba oleh SRC sebelum dimasukkan ke Senarai Mangsa Aktif SRC.</p></div><button id="srcRefresh" class="ghost">MUAT SEMULA</button></div>
+ <div class="adu-metrics"><div class="adu-metric"><small>DALAM PERJALANAN</small><strong id="srcPerjalanan">0</strong></div><div class="adu-metric"><small>HIJAU</small><strong id="srcHijau">0</strong></div><div class="adu-metric"><small>KUNING</small><strong id="srcKuning">0</strong></div><div class="adu-metric"><small>DOKUMENTASI SELESAI</small><strong id="srcDokSelesai">0</strong></div><div class="adu-metric"><small>JUMLAH DALAM SRC</small><strong id="srcJumlah">0</strong></div></div>
+ <div class="adu-transfer"><div class="section-head"><div><h3>Mangsa Dalam Perjalanan ke SRC</h3><p class="muted">Mangsa belum dikira berada di SRC sehingga butang SAHKAN TIBA DI SRC ditekan.</p></div></div><div id="srcIncomingList"><p class="muted">Tiada mangsa dalam perjalanan.</p></div></div>
  <p id="srcStatus" class="status"></p><h3>Senarai Mangsa Aktif SRC</h3><div id="srcList"><p class="muted">Memuatkan mangsa SRC...</p></div>
  <div class="adu-transfer"><h3>Rekod Keluar SRC</h3><div id="srcTransferList"><p class="muted">Tiada rekod keluar SRC.</p></div></div>`;
  document.querySelector('main').appendChild(p); $('#srcRefresh').onclick=loadSrcData; await loadSrcData();
@@ -1469,27 +1470,45 @@ async function syncSrcIncoming(){
  ]);
  if(tq.error)throw tq.error;if(aq.error)throw aq.error;
  const incoming=[];
- for(const m of tq.data||[])incoming.push({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_masuk_src:m.tag_triage,tag_src_semasa:m.tag_triage,sumber_asal:'TRIAGE',sumber_rekod_id:m.id,catatan:m.catatan_pemindahan||m.catatan||null,status_lokasi:'DALAM_SRC'});
- for(const m of aq.data||[])incoming.push({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_masuk_src:m.tag_adu_semasa||m.tag_triage,tag_src_semasa:m.tag_adu_semasa||m.tag_triage,sumber_asal:'ADU',sumber_rekod_id:m.id,catatan:m.catatan_pemindahan||m.catatan||null,status_lokasi:'DALAM_SRC'});
+ for(const m of tq.data||[])incoming.push({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_masuk_src:m.tag_triage,tag_src_semasa:m.tag_triage,sumber_asal:'TRIAGE',sumber_rekod_id:m.id,catatan:m.catatan_pemindahan||m.catatan||null,status_lokasi:'DALAM_PERJALANAN',masa_bertolak_src:m.masa_keluar_triage||null});
+ for(const m of aq.data||[])incoming.push({operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_masuk_src:m.tag_adu_semasa||m.tag_triage,tag_src_semasa:m.tag_adu_semasa||m.tag_triage,sumber_asal:'ADU',sumber_rekod_id:m.id,catatan:m.catatan_pemindahan||m.catatan||null,status_lokasi:'DALAM_PERJALANAN',masa_bertolak_src:m.masa_keluar_adu||null});
  for(const row of incoming){
-  const ex=await supabase.from('ecor_src_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',row.no_mangsa).maybeSingle();
+  const ex=await supabase.from('ecor_src_mangsa').select('id,status_lokasi').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',row.no_mangsa).maybeSingle();
   if(ex.error)throw ex.error;
   if(!ex.data){const ins=await supabase.from('ecor_src_mangsa').insert({...row,didaftarkan_oleh:session.user.id});if(ins.error)throw ins.error;}
  }
 }
 
+function srcTravelDuration(v){
+ if(!v)return '-'; const ms=Date.now()-new Date(v).getTime(); if(!Number.isFinite(ms)||ms<0)return '-';
+ const min=Math.floor(ms/60000), h=Math.floor(min/60), m=min%60; return h>0?`${h} jam ${m} minit`:`${m} minit`;
+}
+
+async function confirmSrcArrival(m){
+ if(!confirm(`Sahkan mangsa ${m.no_mangsa} telah TIBA di SURVIVOR RECEPTION CENTRE (SRC)?`))return;
+ const now=new Date().toISOString();
+ const q=await supabase.from('ecor_src_mangsa').update({status_lokasi:'DALAM_SRC',masa_terima_src:now,masa_tiba_src:now,disahkan_tiba_oleh:session.user.id}).eq('id',m.id).eq('operasi_id',assignment.operasi_id).eq('status_lokasi','DALAM_PERJALANAN').select('id').maybeSingle();
+ if(q.error){alert(`Gagal mengesahkan ketibaan: ${q.error.message}`);return}if(!q.data){alert('Rekod tidak berubah. Mangsa mungkin telah disahkan tiba oleh petugas lain.');await loadSrcData();return}
+ alert(`Ketibaan ${m.no_mangsa} berjaya disahkan. Mangsa kini berada di SRC.`);await loadSrcData();
+}
+
 async function loadSrcData(){
  if(!isSrcSupervisor())return;const st=$('#srcStatus');if(st)st.textContent='Menyelaraskan rekod mangsa ke SRC...';
  try{await syncSrcIncoming();}catch(e){if(st)st.textContent=`Gagal menyelaras SRC: ${e.message}`;return;}
- const q=await supabase.from('ecor_src_mangsa').select('*').eq('operasi_id',assignment.operasi_id).order('masa_terima_src',{ascending:false});
- const box=$('#srcList'),out=$('#srcTransferList');if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
- const rows=q.data||[],active=rows.filter(m=>['DALAM_SRC','DOKUMENTASI','MENUNGGU_PMA'].includes(String(m.status_lokasi||'DALAM_SRC').toUpperCase())),moved=rows.filter(m=>!['DALAM_SRC','DOKUMENTASI','MENUNGGU_PMA'].includes(String(m.status_lokasi||'DALAM_SRC').toUpperCase()));
+ const q=await supabase.from('ecor_src_mangsa').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:false});
+ const box=$('#srcList'),incomingBox=$('#srcIncomingList'),out=$('#srcTransferList');if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
+ const rows=q.data||[];
+ const travelling=rows.filter(m=>String(m.status_lokasi||'').toUpperCase()==='DALAM_PERJALANAN');
+ const active=rows.filter(m=>['DALAM_SRC','DOKUMENTASI','MENUNGGU_PMA'].includes(String(m.status_lokasi||'').toUpperCase()));
+ const moved=rows.filter(m=>!['DALAM_PERJALANAN','DALAM_SRC','DOKUMENTASI','MENUNGGU_PMA'].includes(String(m.status_lokasi||'').toUpperCase()));
  const tag=t=>active.filter(m=>String(m.tag_src_semasa||'').toUpperCase()===t).length;
- $('#srcHijau').textContent=tag('HIJAU');$('#srcKuning').textContent=tag('KUNING');$('#srcDokSelesai').textContent=active.filter(m=>m.status_dokumentasi==='SELESAI').length;$('#srcTungguPma').textContent=active.filter(m=>m.status_lokasi==='MENUNGGU_PMA').length;$('#srcJumlah').textContent=active.length;
- box.innerHTML=active.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1250px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>JANTINA</th><th>TAG MASUK SRC</th><th>TAG SRC SEMASA</th><th>DOKUMENTASI</th><th>STATUS / DESTINASI</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${active.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td><span class="adu-gender">${esc(m.jantina||'BELUM DIKENALPASTI')}</span></td><td>${aduDot(m.tag_masuk_src)} ${esc(m.tag_masuk_src||'-')}</td><td><span class="adu-tag">${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</span></td><td>${esc(m.status_dokumentasi==='SELESAI'?'SELESAI':'BELUM SELESAI')}</td><td class="adu-destination">${esc(String(m.status_lokasi||'DALAM_SRC').replaceAll('_',' '))}</td><td>${esc(m.catatan||'-')}</td><td><div class="adu-actions"><button class="ghost" data-su="${m.id}">KEMAS KINI TAG</button><button class="ghost" data-sd="${m.id}">DOKUMENTASI</button><button class="ghost" data-sp="${m.id}">KE PMA</button><button class="ghost" data-sm="${m.id}">PINDAH / KELUAR SRC</button><button class="ghost" data-sh="${m.id}">SEJARAH TAG</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa aktif di SRC.</p>';
+ $('#srcPerjalanan').textContent=travelling.length;$('#srcHijau').textContent=tag('HIJAU');$('#srcKuning').textContent=tag('KUNING');$('#srcDokSelesai').textContent=active.filter(m=>m.status_dokumentasi==='SELESAI').length;$('#srcJumlah').textContent=active.length;
+ incomingBox.innerHTML=travelling.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1050px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>ASAL</th><th>TAG</th><th>JANTINA</th><th>MASA BERTOLAK</th><th>TEMPOH PERJALANAN</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${travelling.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td><b>${esc(m.sumber_asal||'-')}</b></td><td><span class="adu-tag">${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</span></td><td><span class="adu-gender">${esc(m.jantina||'BELUM DIKENALPASTI')}</span></td><td>${esc(fmt(m.masa_bertolak_src))}</td><td>${esc(srcTravelDuration(m.masa_bertolak_src))}</td><td>${esc(m.catatan||'-')}</td><td><button data-arrive="${m.id}">SAHKAN TIBA DI SRC</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa dalam perjalanan ke SRC.</p>';
+ box.innerHTML=active.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1250px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>JANTINA</th><th>TAG MASUK SRC</th><th>TAG SRC SEMASA</th><th>MASA TIBA</th><th>DOKUMENTASI</th><th>STATUS / DESTINASI</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${active.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td><span class="adu-gender">${esc(m.jantina||'BELUM DIKENALPASTI')}</span></td><td>${aduDot(m.tag_masuk_src)} ${esc(m.tag_masuk_src||'-')}</td><td><span class="adu-tag">${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</span></td><td>${esc(fmt(m.masa_tiba_src||m.masa_terima_src))}</td><td>${esc(m.status_dokumentasi==='SELESAI'?'SELESAI':'BELUM SELESAI')}</td><td class="adu-destination">${esc(String(m.status_lokasi||'DALAM_SRC').replaceAll('_',' '))}</td><td>${esc(m.catatan||'-')}</td><td><div class="adu-actions"><button class="ghost" data-su="${m.id}">KEMAS KINI TAG</button><button class="ghost" data-sd="${m.id}">DOKUMENTASI</button><button class="ghost" data-sp="${m.id}">KE PMA</button><button class="ghost" data-sm="${m.id}">PINDAH / KELUAR SRC</button><button class="ghost" data-sh="${m.id}">SEJARAH TAG</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa aktif di SRC.</p>';
  out.innerHTML=moved.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>TAG AKHIR</th><th>DESTINASI</th><th>MASA KELUAR</th><th>CATATAN</th></tr></thead><tbody>${moved.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</td><td class="adu-destination">${esc(m.destinasi||m.status_lokasi||'-')}</td><td>${esc(fmt(m.masa_keluar_src))}</td><td>${esc(m.catatan_pemindahan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada rekod keluar SRC.</p>';
+ incomingBox.querySelectorAll('[data-arrive]').forEach(x=>x.onclick=()=>confirmSrcArrival(travelling.find(m=>m.id===x.dataset.arrive)));
  box.querySelectorAll('[data-su]').forEach(x=>x.onclick=()=>updateSrcTag(active.find(m=>m.id===x.dataset.su)));box.querySelectorAll('[data-sd]').forEach(x=>x.onclick=()=>documentSrcVictim(active.find(m=>m.id===x.dataset.sd)));box.querySelectorAll('[data-sp]').forEach(x=>x.onclick=()=>moveSrcToPma(active.find(m=>m.id===x.dataset.sp)));box.querySelectorAll('[data-sm]').forEach(x=>x.onclick=()=>transferSrcVictim(active.find(m=>m.id===x.dataset.sm)));box.querySelectorAll('[data-sh]').forEach(x=>x.onclick=()=>showSrcHistory(active.find(m=>m.id===x.dataset.sh)));
- if(st)st.textContent=`SRC dikemas kini. ${active.length} mangsa berada dalam SRC.`;
+ if(st)st.textContent=`${travelling.length} mangsa dalam perjalanan • ${active.length} mangsa telah disahkan berada di SRC.`;
 }
 
 async function updateSrcTag(m){
@@ -1500,42 +1519,25 @@ async function updateSrcTag(m){
 }
 
 async function documentSrcVictim(m){
- const nama=prompt('Nama penuh mangsa:',m.nama_mangsa||'') ;if(nama===null)return;
- const id=prompt('No. KP / Pasport:',m.no_pengenalan||'');if(id===null)return;
- const tel=prompt('No. telefon mangsa (jika ada):',m.no_telefon||'');if(tel===null)return;
- const waris=prompt('Nama waris / keluarga:',m.nama_waris||'');if(waris===null)return;
- const telWaris=prompt('No. telefon waris / keluarga:',m.no_telefon_waris||'');if(telWaris===null)return;
- const ket=prompt('Catatan keterangan Pasukan Siasatan (Dokumentasi):',m.catatan_dokumentasi||'');if(ket===null)return;
+ const nama=prompt('Nama penuh mangsa:',m.nama_mangsa||'') ;if(nama===null)return; const id=prompt('No. KP / Pasport:',m.no_pengenalan||'');if(id===null)return; const tel=prompt('No. telefon mangsa (jika ada):',m.no_telefon||'');if(tel===null)return; const waris=prompt('Nama waris / keluarga:',m.nama_waris||'');if(waris===null)return; const telWaris=prompt('No. telefon waris / keluarga:',m.no_telefon_waris||'');if(telWaris===null)return; const ket=prompt('Catatan keterangan Pasukan Siasatan (Dokumentasi):',m.catatan_dokumentasi||'');if(ket===null)return;
  const q=await supabase.from('ecor_src_mangsa').update({nama_mangsa:nama.trim()||m.nama_mangsa||null,no_pengenalan:id.trim()||null,no_telefon:tel.trim()||null,nama_waris:waris.trim()||null,no_telefon_waris:telWaris.trim()||null,catatan_dokumentasi:ket.trim()||null,status_dokumentasi:'SELESAI',masa_dokumentasi_selesai:new Date().toISOString(),status_lokasi:'MENUNGGU_PMA',didokumentasi_oleh:session.user.id}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return}alert('Dokumentasi selesai. Mangsa kini MENUNGGU PMA.');await loadSrcData();
 }
 
 async function moveSrcToPma(m){
- if(m.status_dokumentasi!=='SELESAI'){alert('Dokumentasi Pasukan Siasatan mesti diselesaikan sebelum mangsa dihantar ke PMA.');return}
- if(!['HIJAU','KUNING'].includes(String(m.tag_src_semasa||'').toUpperCase())){alert('Hanya mangsa tag HIJAU / KUNING yang stabil boleh dihantar ke PMA.');return}
- const note=prompt('Catatan pemindahan ke PRIVATE MATCHING AREA (PMA):')||'';await moveSrcVictim(m,'PMA','PRIVATE MATCHING AREA (PMA)',note);
+ if(m.status_dokumentasi!=='SELESAI'){alert('Dokumentasi Pasukan Siasatan mesti diselesaikan sebelum mangsa dihantar ke PMA.');return} if(!['HIJAU','KUNING'].includes(String(m.tag_src_semasa||'').toUpperCase())){alert('Hanya mangsa tag HIJAU / KUNING yang stabil boleh dihantar ke PMA.');return} const note=prompt('Catatan pemindahan ke PRIVATE MATCHING AREA (PMA):')||'';await moveSrcVictim(m,'PMA','PRIVATE MATCHING AREA (PMA)',note);
 }
 
 async function transferSrcVictim(m){
- const raw=prompt('Destinasi keluar SRC:\n1 = AIR DISASTER UNIT (ADU)\n2 = HOSPITAL\n3 = BODY HOLDING AREA (BHA)','1');if(!raw)return;
- if(raw.trim()==='1'){await moveSrcVictim(m,'ADU','AIR DISASTER UNIT (ADU)',prompt('Catatan pemindahan ke ADU:')||'');return}
- if(raw.trim()==='2'){const h=prompt('Masukkan nama hospital:');if(!h?.trim())return;await moveSrcVictim(m,'HOSPITAL',h.trim(),prompt(`Catatan pemindahan ke ${h.trim()}:`)||'');return}
- if(raw.trim()==='3'){if(String(m.tag_src_semasa||'').toUpperCase()!=='PUTIH'&&!confirm('Tag SRC semasa bukan PUTIH. Teruskan ke BHA?'))return;await moveSrcVictim(m,'BHA','BODY HOLDING AREA (BHA)',prompt('Catatan pemindahan ke BHA:')||'');return}
- alert('Pilihan tidak sah.');
+ const raw=prompt('Destinasi keluar SRC:\n1 = AIR DISASTER UNIT (ADU)\n2 = HOSPITAL\n3 = BODY HOLDING AREA (BHA)','1');if(!raw)return; if(raw.trim()==='1'){await moveSrcVictim(m,'ADU','AIR DISASTER UNIT (ADU)',prompt('Catatan pemindahan ke ADU:')||'');return} if(raw.trim()==='2'){const h=prompt('Masukkan nama hospital:');if(!h?.trim())return;await moveSrcVictim(m,'HOSPITAL',h.trim(),prompt(`Catatan pemindahan ke ${h.trim()}:`)||'');return} if(raw.trim()==='3'){if(String(m.tag_src_semasa||'').toUpperCase()!=='PUTIH'&&!confirm('Tag SRC semasa bukan PUTIH. Teruskan ke BHA?'))return;await moveSrcVictim(m,'BHA','BODY HOLDING AREA (BHA)',prompt('Catatan pemindahan ke BHA:')||'');return} alert('Pilihan tidak sah.');
 }
 
 async function moveSrcVictim(m,statusLokasi,destinasi,note=''){
- if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari SRC ke ${destinasi}?`))return;
- if(statusLokasi==='ADU'){
-  const ex=await supabase.from('ecor_adu_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return}
-  const payload={nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_triage:m.tag_masuk_src,tag_adu_semasa:m.tag_src_semasa,catatan:note.trim()||m.catatan||null,status_lokasi:'DALAM_ADU',destinasi:null,masa_keluar_adu:null,catatan_pemindahan:null};
-  const a=ex.data?await supabase.from('ecor_adu_mangsa').update({...payload,masa_terima_adu:new Date().toISOString()}).eq('id',ex.data.id):await supabase.from('ecor_adu_mangsa').insert({...payload,operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,didaftarkan_oleh:session.user.id});if(a.error){alert(`Gagal menghantar rekod ke ADU: ${a.error.message}`);return}
- }
+ if(!confirm(`Sahkan mangsa ${m.no_mangsa} keluar dari SRC ke ${destinasi}?`))return; if(statusLokasi==='ADU'){ const ex=await supabase.from('ecor_adu_mangsa').select('id').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).maybeSingle();if(ex.error){alert(ex.error.message);return} const payload={nama_mangsa:m.nama_mangsa,no_pengenalan:m.no_pengenalan,jantina:m.jantina,warganegara:m.warganegara,tag_triage:m.tag_masuk_src,tag_adu_semasa:m.tag_src_semasa,catatan:note.trim()||m.catatan||null,status_lokasi:'DALAM_ADU',destinasi:null,masa_keluar_adu:null,catatan_pemindahan:null}; const a=ex.data?await supabase.from('ecor_adu_mangsa').update({...payload,masa_terima_adu:new Date().toISOString()}).eq('id',ex.data.id):await supabase.from('ecor_adu_mangsa').insert({...payload,operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,didaftarkan_oleh:session.user.id});if(a.error){alert(`Gagal menghantar rekod ke ADU: ${a.error.message}`);return} }
  const q=await supabase.from('ecor_src_mangsa').update({status_lokasi:statusLokasi,destinasi,masa_keluar_src:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return}alert(`Mangsa berjaya dipindahkan ke ${destinasi}.`);await loadSrcData();
 }
 
 async function showSrcHistory(m){
- const q=await supabase.from('ecor_src_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return}
- alert(`SEJARAH TAG SRC — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
+ const q=await supabase.from('ecor_src_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return} alert(`SEJARAH TAG SRC — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
 }
 
 // FIX 019: mula aplikasi hanya selepas semua const/fungsi modul ADU selesai diinisialisasi.
