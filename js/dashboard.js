@@ -144,6 +144,8 @@ async function loadAssignment() {
   await renderAduModule();
   await renderTriageModule();
   await renderSrcModule();
+  await renderFfrhModule();
+  await renderFfhaModule();
   await renderPmaModule();
   await renderVictimMovementPanel();
   await renderCorAduStatus();
@@ -969,38 +971,59 @@ async function confirmVictimArrival(m){
  const q=await supabase.from('ecor_pergerakan_mangsa').update({status:'TIBA',masa_tiba:now,disahkan_tiba_oleh:session.user.id}).eq('id',m.id).eq('status','DALAM_PERJALANAN').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Rekod pergerakan telah dikemas kini oleh petugas lain.');return}alert(`${m.no_mangsa} telah disahkan tiba di ${code}.`);await loadVictimMovements();if(code==='ADU')await loadAduData();if(code==='SRC')await loadSrcData();if(code==='PMA')await loadPmaData();
 }
 
-// ===== FIX 039: PMA — PERTEMUAN MANGSA DENGAN WARIS =====
-const isPmaSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='PMA' &&
-  String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
+// ===== FIX 040: FFRH → FFHA → PMA / PADANAN WARIS =====
+const dutyCode=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
+const isDutySupervisor=code=>dutyCode()===code && String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
+const isFfrhSupervisor=()=>isDutySupervisor('FFRH');
+const isFfhaSupervisor=()=>isDutySupervisor('FFHA');
+const isPmaSupervisor=()=>isDutySupervisor('PMA');
+
+async function renderFfrhModule(){
+ $('#ffrhPanel')?.remove(); if(!isFfrhSupervisor())return; ensureAduStyles();
+ const p=document.createElement('section');p.id='ffrhPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">FAMILY / FRIENDS REGISTRATION</p><h2>FFRH — Pendaftaran & Pengesahan Waris</h2><p class="muted">Waris mesti didaftarkan, dipadankan kepada ID mangsa dan disahkan sebelum dihantar ke FFHA.</p></div><button id="ffrhRefresh" class="ghost">MUAT SEMULA</button></div>
+ <form id="ffrhForm"><div class="adu-grid"><label>ID Mangsa<input id="ffrhVictim" required placeholder="Contoh: MANGSA 001"></label><label>Nama Waris<input id="ffrhName" required></label><label>No. KP / Pasport<input id="ffrhId" required></label><label>No. Telefon<input id="ffrhPhone"></label><label>Hubungan Dengan Mangsa<input id="ffrhRelation" required placeholder="Contoh: Isteri / Suami / Anak"></label><label class="full">Catatan<textarea id="ffrhNote"></textarea></label></div><button type="submit">DAFTAR WARIS</button></form><p id="ffrhStatus" class="status"></p><h3>Senarai Pendaftaran Waris</h3><div id="ffrhList"></div>`;
+ document.querySelector('main').appendChild(p);$('#ffrhRefresh').onclick=loadFfrhData;$('#ffrhForm').onsubmit=registerWaris;await loadFfrhData();
+}
+async function registerWaris(e){
+ e.preventDefault();const payload={operasi_id:assignment.operasi_id,no_mangsa:$('#ffrhVictim').value.trim().toUpperCase(),nama_waris:$('#ffrhName').value.trim(),no_pengenalan:$('#ffrhId').value.trim(),no_telefon:$('#ffrhPhone').value.trim()||null,hubungan:$('#ffrhRelation').value.trim(),catatan:$('#ffrhNote').value.trim()||null,status:'MENUNGGU_PENGESAHAN',masa_daftar:new Date().toISOString(),didaftarkan_oleh:session.user.id};
+ const q=await supabase.from('ecor_waris').insert(payload);if(q.error){$('#ffrhStatus').textContent=q.error.message;return}e.target.reset();$('#ffrhStatus').textContent='Waris berjaya didaftarkan. Sila buat pengesahan hubungan.';await loadFfrhData();
+}
+async function loadFfrhData(){
+ if(!isFfrhSupervisor())return;const q=await supabase.from('ecor_waris').select('*').eq('operasi_id',assignment.operasi_id).order('masa_daftar',{ascending:false});const box=$('#ffrhList');if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const rows=q.data||[];
+ box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1100px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA WARIS</th><th>NO. KP / PASPORT</th><th>TELEFON</th><th>HUBUNGAN</th><th>STATUS</th><th>MASA DAFTAR</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((w,i)=>`<tr><td>${i+1}</td><td><b>${esc(w.no_mangsa)}</b></td><td>${esc(w.nama_waris)}</td><td>${esc(w.no_pengenalan)}</td><td>${esc(w.no_telefon||'-')}</td><td>${esc(w.hubungan)}</td><td class="adu-destination">${esc(String(w.status).replaceAll('_',' '))}</td><td>${esc(fmt(w.masa_daftar))}</td><td>${w.status==='MENUNGGU_PENGESAHAN'?`<button data-verify="${w.id}">SAHKAN WARIS</button>`:'<span class="adu-status-active"><b>DISAHKAN</b></span>'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada waris didaftarkan.</p>';
+ box.querySelectorAll('[data-verify]').forEach(b=>b.onclick=()=>verifyWaris(rows.find(x=>x.id===b.dataset.verify)));
+}
+async function verifyWaris(w){
+ if(!w||!confirm(`Sahkan ${w.nama_waris} adalah waris sebenar kepada ${w.no_mangsa}?\n\nSelepas disahkan, waris akan dihantar ke FFHA.`))return;const now=new Date().toISOString();const q=await supabase.from('ecor_waris').update({status:'FFHA',disahkan:true,masa_disahkan:now,disahkan_oleh:session.user.id,masa_masuk_ffha:now}).eq('id',w.id).eq('status','MENUNGGU_PENGESAHAN').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Rekod waris tidak dapat disahkan.');return}alert('Waris berjaya disahkan dan kini ditempatkan di FFHA.');await loadFfrhData();
+}
+
+async function renderFfhaModule(){
+ $('#ffhaPanel')?.remove();if(!isFfhaSupervisor())return;ensureAduStyles();const p=document.createElement('section');p.id='ffhaPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">FAMILY / FRIENDS HOLDING AREA</p><h2>FFHA — Waris Menunggu</h2><p class="muted">Hanya waris yang telah disahkan di FFRH dipaparkan. Waris boleh dihantar ke PMA apabila proses pertemuan bersedia.</p></div><button id="ffhaRefresh" class="ghost">MUAT SEMULA</button></div><div id="ffhaList"></div><p id="ffhaStatus" class="status"></p>`;document.querySelector('main').appendChild(p);$('#ffhaRefresh').onclick=loadFfhaData;await loadFfhaData();
+}
+async function loadFfhaData(){
+ if(!isFfhaSupervisor())return;const q=await supabase.from('ecor_waris').select('*').eq('operasi_id',assignment.operasi_id).in('status',['FFHA','DALAM_PERJALANAN_PMA','PMA','DIPERTEMUKAN']).order('masa_disahkan',{ascending:false});const box=$('#ffhaList');if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const rows=q.data||[];
+ box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1050px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA WARIS</th><th>HUBUNGAN</th><th>MASA MASUK FFHA</th><th>STATUS</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((w,i)=>`<tr><td>${i+1}</td><td><b>${esc(w.no_mangsa)}</b></td><td>${esc(w.nama_waris)}</td><td>${esc(w.hubungan)}</td><td>${esc(fmt(w.masa_masuk_ffha))}</td><td class="adu-destination">${esc(String(w.status).replaceAll('_',' '))}</td><td>${w.status==='FFHA'?`<button data-send-pma="${w.id}">HANTAR WARIS KE PMA</button>`:'<span class="muted">${esc(String(w.status).replaceAll('_',' '))}</span>'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada waris yang disahkan berada di FFHA.</p>';
+ box.querySelectorAll('[data-send-pma]').forEach(b=>b.onclick=()=>sendWarisToPma(rows.find(x=>x.id===b.dataset.sendPma)));
+}
+async function sendWarisToPma(w){
+ if(!w||!confirm(`Hantar ${w.nama_waris} ke PMA untuk dipertemukan dengan ${w.no_mangsa}?`))return;const q=await supabase.from('ecor_waris').update({status:'DALAM_PERJALANAN_PMA',masa_bertolak_pma:new Date().toISOString(),dihantar_pma_oleh:session.user.id}).eq('id',w.id).eq('status','FFHA').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Status waris tidak dapat dikemas kini.');return}alert('Waris kini DALAM PERJALANAN KE PMA.');await loadFfhaData();
+}
 
 async function renderPmaModule(){
-  $('#pmaPanel')?.remove(); if(!isPmaSupervisor())return; ensureAduStyles();
-  const p=document.createElement('section'); p.id='pmaPanel'; p.className='panel';
-  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PRIVATE MATCHING AREA</p><h2>PMA — Pertemuan Mangsa & Waris</h2><p class="muted">Mangsa yang telah disahkan tiba di PMA boleh ditandakan selepas dipertemukan dengan waris.</p></div><button id="pmaRefresh" class="ghost">MUAT SEMULA</button></div>
-  <div class="adu-metrics"><div class="adu-metric"><small>DALAM PERJALANAN</small><strong id="pmaTravel">0</strong></div><div class="adu-metric"><small>DALAM PMA</small><strong id="pmaInside">0</strong></div><div class="adu-metric"><small>DIPERTEMUKAN DENGAN WARIS</small><strong id="pmaReunited">0</strong></div></div>
-  <div id="pmaList"><p class="muted">Memuatkan rekod PMA...</p></div><p id="pmaStatus" class="status"></p>`;
-  document.querySelector('main').appendChild(p); $('#pmaRefresh').onclick=loadPmaData; await loadPmaData();
+ $('#pmaPanel')?.remove();if(!isPmaSupervisor())return;ensureAduStyles();const p=document.createElement('section');p.id='pmaPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PRIVATE MATCHING AREA</p><h2>PMA — Pertemuan Mangsa & Waris</h2><p class="muted">Pertemuan hanya boleh disahkan apabila mangsa telah selesai dokumentasi SRC, mangsa tiba di PMA dan waris yang sah juga telah tiba di PMA.</p></div><button id="pmaRefresh" class="ghost">MUAT SEMULA</button></div><div class="adu-metrics"><div class="adu-metric"><small>MANGSA DALAM PMA</small><strong id="pmaInside">0</strong></div><div class="adu-metric"><small>WARIS MENUNGGU / TIBA</small><strong id="pmaWaris">0</strong></div><div class="adu-metric"><small>DIPERTEMUKAN</small><strong id="pmaReunited">0</strong></div></div><h3>Waris Ke PMA</h3><div id="pmaWarisList"></div><h3>Padanan Mangsa & Waris</h3><div id="pmaList"></div><p id="pmaStatus" class="status"></p>`;document.querySelector('main').appendChild(p);$('#pmaRefresh').onclick=loadPmaData;await loadPmaData();
 }
-
 async function loadPmaData(){
-  if(!isPmaSupervisor())return;
-  const q=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('destinasi','PMA').order('masa_bertolak',{ascending:false});
-  const box=$('#pmaList'),st=$('#pmaStatus'); if(q.error){if(box)box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
-  const rows=q.data||[], travelling=rows.filter(x=>String(x.status).toUpperCase()==='DALAM_PERJALANAN'), arrived=rows.filter(x=>String(x.status).toUpperCase()==='TIBA');
-  const reunited=arrived.filter(x=>x.dipertemukan_dengan_waris===true);
-  $('#pmaTravel').textContent=travelling.length; $('#pmaInside').textContent=arrived.length-reunited.length; $('#pmaReunited').textContent=reunited.length;
-  box.innerHTML=arrived.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1050px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>TAG</th><th>MASA TIBA</th><th>STATUS</th><th>MASA PERTEMUAN</th><th>TINDAKAN</th></tr></thead><tbody>${arrived.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(fmt(m.masa_tiba))}</td><td class="adu-destination">${m.dipertemukan_dengan_waris===true?'DIPERTEMUKAN DENGAN WARIS':'DALAM PMA'}</td><td>${m.masa_dipertemukan_waris?esc(fmt(m.masa_dipertemukan_waris)):'-'}</td><td>${m.dipertemukan_dengan_waris===true?'<span class="adu-status-active"><b>SELESAI</b></span>':`<button data-reunite="${m.id}">MANGSA DIPERTEMUKAN DENGAN WARIS</button>`}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Belum ada mangsa yang disahkan tiba di PMA.</p>';
-  box.querySelectorAll('[data-reunite]').forEach(b=>b.onclick=()=>confirmPmaReunion(arrived.find(x=>x.id===b.dataset.reunite)));
-  if(st)st.textContent=`${arrived.length-reunited.length} mangsa dalam PMA • ${reunited.length} mangsa telah dipertemukan dengan waris.`;
+ if(!isPmaSupervisor())return;const [mq,wq]=await Promise.all([supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('destinasi','PMA').order('masa_bertolak',{ascending:false}),supabase.from('ecor_waris').select('*').eq('operasi_id',assignment.operasi_id).in('status',['DALAM_PERJALANAN_PMA','PMA','DIPERTEMUKAN']).order('masa_bertolak_pma',{ascending:false})]);
+ const box=$('#pmaList'),wbox=$('#pmaWarisList'),st=$('#pmaStatus');const err=mq.error||wq.error;if(err){if(box)box.innerHTML=`<p class="status">${esc(err.message)}</p>`;return}const victims=(mq.data||[]).filter(x=>String(x.status).toUpperCase()==='TIBA');const waris=wq.data||[];const warisPma=waris.filter(x=>x.status==='PMA'||x.status==='DIPERTEMUKAN');const reunited=victims.filter(x=>x.dipertemukan_dengan_waris===true);$('#pmaInside').textContent=victims.length-reunited.length;$('#pmaWaris').textContent=waris.filter(x=>x.status!=='DIPERTEMUKAN').length;$('#pmaReunited').textContent=reunited.length;
+ wbox.innerHTML=waris.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA WARIS</th><th>HUBUNGAN</th><th>STATUS</th><th>MASA BERTOLAK</th><th>MASA TIBA</th><th>TINDAKAN</th></tr></thead><tbody>${waris.map((w,i)=>`<tr><td>${i+1}</td><td><b>${esc(w.no_mangsa)}</b></td><td>${esc(w.nama_waris)}</td><td>${esc(w.hubungan)}</td><td>${esc(String(w.status).replaceAll('_',' '))}</td><td>${esc(fmt(w.masa_bertolak_pma))}</td><td>${w.masa_tiba_pma?esc(fmt(w.masa_tiba_pma)):'-'}</td><td>${w.status==='DALAM_PERJALANAN_PMA'?`<button data-waris-arrive="${w.id}">SAHKAN WARIS TIBA DI PMA</button>`:'<span class="adu-status-active"><b>${esc(String(w.status).replaceAll('_',' '))}</b></span>'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada waris dalam perjalanan / berada di PMA.</p>';
+ box.innerHTML=victims.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1150px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA MANGSA</th><th>TAG</th><th>MASA TIBA</th><th>WARIS SAH DI PMA</th><th>HUBUNGAN</th><th>STATUS</th><th>TINDAKAN</th></tr></thead><tbody>${victims.map((m,i)=>{const w=warisPma.find(x=>String(x.no_mangsa).trim().toUpperCase()===String(m.no_mangsa).trim().toUpperCase());return `<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(fmt(m.masa_tiba))}</td><td>${w?esc(w.nama_waris):'<span class="muted">BELUM TIBA</span>'}</td><td>${w?esc(w.hubungan):'-'}</td><td class="adu-destination">${m.dipertemukan_dengan_waris===true?'DIPERTEMUKAN DENGAN WARIS':'DALAM PMA'}</td><td>${m.dipertemukan_dengan_waris===true?'<span class="adu-status-active"><b>SELESAI</b></span>':(w?`<button data-reunite="${m.id}" data-waris="${w.id}">MANGSA DIPERTEMUKAN DENGAN WARIS</button>`:'<button disabled>MENUNGGU WARIS SAH</button>')}</td></tr>`}).join('')}</tbody></table></div>`:'<p class="muted">Belum ada mangsa yang disahkan tiba di PMA.</p>';
+ wbox.querySelectorAll('[data-waris-arrive]').forEach(b=>b.onclick=()=>confirmWarisPmaArrival(waris.find(x=>x.id===b.dataset.warisArrive)));box.querySelectorAll('[data-reunite]').forEach(b=>b.onclick=()=>confirmPmaReunion(victims.find(x=>x.id===b.dataset.reunite),waris.find(x=>x.id===b.dataset.waris)));if(st)st.textContent=`${victims.length-reunited.length} mangsa menunggu • ${warisPma.filter(x=>x.status==='PMA').length} waris sah di PMA • ${reunited.length} pertemuan selesai.`;
 }
-
-async function confirmPmaReunion(m){
-  if(!m||m.dipertemukan_dengan_waris===true)return;
-  if(!confirm(`Sahkan ${m.no_mangsa} telah DIPERTEMUKAN DENGAN WARIS di PMA?`))return;
-  const now=new Date().toISOString();
-  const q=await supabase.from('ecor_pergerakan_mangsa').update({dipertemukan_dengan_waris:true,masa_dipertemukan_waris:now,dipertemukan_oleh:session.user.id}).eq('id',m.id).eq('destinasi','PMA').eq('status','TIBA').select('id').maybeSingle();
-  if(q.error||!q.data){alert(q.error?.message||'Rekod PMA tidak dapat dikemas kini.');return}
-  alert(`${m.no_mangsa} telah direkodkan DIPERTEMUKAN DENGAN WARIS.`); await loadPmaData(); await loadVictimMovements();
+async function confirmWarisPmaArrival(w){
+ if(!w||!confirm(`Sahkan waris ${w.nama_waris} telah tiba di PMA?`))return;const q=await supabase.from('ecor_waris').update({status:'PMA',masa_tiba_pma:new Date().toISOString(),disahkan_tiba_pma_oleh:session.user.id}).eq('id',w.id).eq('status','DALAM_PERJALANAN_PMA').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Rekod ketibaan waris tidak dapat dikemas kini.');return}await loadPmaData();
+}
+async function confirmPmaReunion(m,w){
+ if(!m||!w||m.dipertemukan_dengan_waris===true)return;if(w.status!=='PMA'){alert('Waris belum disahkan tiba di PMA.');return}if(String(w.no_mangsa).trim().toUpperCase()!==String(m.no_mangsa).trim().toUpperCase()){alert('ID mangsa pada rekod waris tidak sepadan.');return}if(!confirm(`Sahkan ${m.no_mangsa} dipertemukan dengan ${w.nama_waris} (${w.hubungan})?`))return;const now=new Date().toISOString();const a=await supabase.from('ecor_pergerakan_mangsa').update({dipertemukan_dengan_waris:true,masa_dipertemukan_waris:now,dipertemukan_oleh:session.user.id,waris_id:w.id}).eq('id',m.id).eq('destinasi','PMA').eq('status','TIBA').eq('dipertemukan_dengan_waris',false).select('id').maybeSingle();if(a.error||!a.data){alert(a.error?.message||'Rekod mangsa tidak dapat dikemas kini.');return}const b=await supabase.from('ecor_waris').update({status:'DIPERTEMUKAN',masa_dipertemukan:now,dipertemukan_oleh:session.user.id}).eq('id',w.id).eq('status','PMA');if(b.error){alert(`Mangsa telah dikemas kini tetapi rekod waris gagal: ${b.error.message}`);return}alert(`${m.no_mangsa} berjaya direkodkan DIPERTEMUKAN DENGAN WARIS.`);await loadPmaData();await loadVictimMovements();
 }
 
 // ===== ADU FASA 3 =====
