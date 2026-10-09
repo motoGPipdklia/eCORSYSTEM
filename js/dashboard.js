@@ -34,6 +34,7 @@ function setupCorTopMenu(){
   if(historyPanel){
     historyPanel.id='corCommunicationLogPanel';
     historyPanel.hidden=true;
+    historyPanel.style.setProperty('display','none','important');
   }
   if(historyList){
     historyList.hidden=false;
@@ -46,7 +47,10 @@ function setupCorTopMenu(){
     actions.innerHTML=`<button id="corCommunicationLogRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corCommunicationLogClose" type="button" class="ghost">TUTUP</button>`;
     historyHead.appendChild(actions);
     $('#corCommunicationLogRefresh').onclick=async()=>{await loadCommunication();};
-    $('#corCommunicationLogClose').onclick=()=>{historyPanel.hidden=true;};
+    $('#corCommunicationLogClose').onclick=()=>{
+      historyPanel.hidden=true;
+      historyPanel.style.setProperty('display','none','important');
+    };
   }
 
   let wrap=$('#corTopMenu');
@@ -130,10 +134,19 @@ function setupCorTopMenu(){
         const panel=$('#corCommunicationLogPanel') || $('#historyList')?.closest('section.panel');
         const list=$('#historyList');
         if(panel){
+          // FIX 063: buka panel secara paksa. Elak konflik hidden/display:none
+          // daripada setupHistoryToggle() dan style lama Sejarah Komunikasi.
           panel.hidden=false;
-          if(list){list.hidden=false;list.style.display='';}
-          loadCommunication();
-          panel.scrollIntoView({behavior:'smooth',block:'start'});
+          panel.removeAttribute('hidden');
+          panel.style.setProperty('display','block','important');
+          if(list){
+            list.hidden=false;
+            list.removeAttribute('hidden');
+            list.style.setProperty('display','block','important');
+          }
+          Promise.resolve(loadCommunication()).finally(()=>{
+            panel.scrollIntoView({behavior:'smooth',block:'start'});
+          });
         }
       }
     });
