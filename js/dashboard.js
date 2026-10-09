@@ -406,7 +406,7 @@ async function loadCommunication() {
     });
   }
   const instructions = rows.filter(x =>
-    x.jenis === 'ARAHAN' &&
+    (x.jenis === 'ARAHAN' || x.jenis === 'MAKLUM_BALAS') &&
     x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
   );
 
@@ -422,7 +422,7 @@ async function loadCommunication() {
   const receivedChronology = rows
     .filter(x =>
       x.kepada_tempat_tugas_id === assignment.tempat_tugas_id &&
-      (x.jenis === 'LAPORAN' || x.jenis === 'ARAHAN')
+      (x.jenis === 'LAPORAN' || x.jenis === 'ARAHAN' || x.jenis === 'MAKLUM_BALAS')
     )
     .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
 
@@ -855,12 +855,18 @@ async function replyInstruction(source) {
   const body = prompt(`Catatan balasan kepada ${source.dari?.kod || 'tempat tugas'}:`);
   if (!body || !body.trim()) return;
 
+  // FIX 065: Jika COR membalas LAPORAN yang diterima, rekod balasan ialah
+  // MAKLUM BALAS — bukan ARAHAN. Balasan kepada arahan lain kekal ARAHAN.
+  const currentCode = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
+  const sourceType = String(source?.jenis || '').trim().toUpperCase();
+  const replyType = currentCode === 'COR' && sourceType === 'LAPORAN' ? 'MAKLUM_BALAS' : 'ARAHAN';
+
   const { error }=await supabase.from('ecor_komunikasi').insert({
     operasi_id: assignment.operasi_id,
     pengirim_id: session.user.id,
     dari_tempat_tugas_id: assignment.tempat_tugas_id,
     kepada_tempat_tugas_id: source.dari_tempat_tugas_id,
-    jenis:'ARAHAN',
+    jenis:replyType,
     tajuk:title,
     kandungan:body.trim(),
     keutamaan:source.keutamaan || 'BIASA',
