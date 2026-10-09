@@ -9,6 +9,63 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({
 
 const fmt = (v) => v ? new Date(v).toLocaleString('ms-MY') : '-';
 
+
+// ===== FIX 054: MENU 3 TITIK COR + LOG KELUAR MERAH =====
+function setupCorTopMenu(){
+  const header=document.querySelector('header.top');
+  const logout=$('#logout');
+  if(logout){
+    logout.classList.add('ecor-logout-red');
+  }
+  const isCor=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='COR';
+  if(!header || !isCor) return;
+
+  // Butang asal kekal sebagai pemegang fungsi, tetapi tidak dipaparkan terus di header.
+  const chronologyBtn=$('#corChronologyToggle');
+  const victimBtn=$('#corVictimToggle');
+  if(chronologyBtn) chronologyBtn.style.display='none';
+  if(victimBtn) victimBtn.style.display='none';
+
+  let wrap=$('#corTopMenu');
+  if(!wrap){
+    wrap=document.createElement('div');
+    wrap.id='corTopMenu';
+    wrap.className='cor-top-menu';
+    wrap.innerHTML=`
+      <button id="corTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu COR" aria-expanded="false">⋮</button>
+      <div id="corTopMenuDropdown" class="cor-menu-dropdown" hidden>
+        <button type="button" data-cor-menu="chronology">KRONOLOGI</button>
+        <button type="button" data-cor-menu="victims">MANGSA KESELURUHAN</button>
+      </div>`;
+    header.insertBefore(wrap,header.firstChild);
+  }
+
+  const toggle=$('#corTopMenuToggle');
+  const dropdown=$('#corTopMenuDropdown');
+  if(!toggle || !dropdown) return;
+  const closeMenu=()=>{dropdown.hidden=true;toggle.setAttribute('aria-expanded','false');};
+  const openMenu=()=>{dropdown.hidden=false;toggle.setAttribute('aria-expanded','true');};
+
+  if(toggle.dataset.bound!=='1'){
+    toggle.dataset.bound='1';
+    toggle.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      dropdown.hidden?openMenu():closeMenu();
+    });
+    dropdown.addEventListener('click',(e)=>{
+      const b=e.target.closest('[data-cor-menu]');
+      if(!b)return;
+      closeMenu();
+      if(b.dataset.corMenu==='chronology') $('#corChronologyToggle')?.click();
+      if(b.dataset.corMenu==='victims') $('#corVictimToggle')?.click();
+    });
+    document.addEventListener('click',(e)=>{
+      if(!wrap.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeMenu();});
+  }
+}
+
 function setReportModeForCurrentRoute() {
   if (!assignment || !parentPlace) return;
 
@@ -151,6 +208,7 @@ async function loadAssignment() {
   await renderPmaModule();
   await renderVictimMovementPanel();
   await renderCorAduStatus();
+  setupCorTopMenu();
 }
 
 function disableReporting() {
@@ -272,6 +330,7 @@ function renderChronology(items) {
       btn.setAttribute('aria-expanded', 'false');
       logoutBtn.insertAdjacentElement('beforebegin', btn);
     }
+    setupCorTopMenu();
 
     const chartHeading = [...document.querySelectorAll('h2')]
       .find(x => x.textContent.trim().toUpperCase() === 'CARTA OPERASI');
@@ -1426,6 +1485,7 @@ async function renderCorAduStatus(){
     btn.setAttribute('aria-expanded','false');
     logoutBtn.insertAdjacentElement('beforebegin',btn);
   }
+  setupCorTopMenu();
 
   const p=document.createElement('section');
   p.id='corAduPanel';
