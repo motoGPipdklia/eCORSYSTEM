@@ -17,12 +17,12 @@
 @media(max-width:700px){.cor-menu-submenu{position:static;margin:4px 0 4px 12px;box-shadow:none;border-left:2px solid #294354}}
 
 /* FIX 062 — Borang Hantar Laporan sebagai modal */
-#reportPanel.report-modal{position:fixed;inset:0;z-index:20000;margin:0!important;padding:24px;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;border:0!important;border-radius:0!important;overflow:auto}
-#reportPanel.report-modal.hidden{display:none!important}
-#reportPanel .report-modal-card{width:min(1150px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;background:#081823;border:1px solid #294354;border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.6)}
-#reportPanel .report-modal-card .section-head{position:sticky;top:-22px;z-index:2;background:#081823;padding:4px 0 14px}
+#reportPanel.report-modal,#corCommandModal.report-modal{position:fixed;inset:0;z-index:20000;margin:0!important;padding:24px;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;border:0!important;border-radius:0!important;overflow:auto}
+#reportPanel.report-modal.hidden,#corCommandModal.report-modal.hidden{display:none!important}
+#reportPanel .report-modal-card,#corCommandModal .report-modal-card{width:min(1150px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;background:#081823;border:1px solid #294354;border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.6)}
+#reportPanel .report-modal-card .section-head,#corCommandModal .report-modal-card .section-head{position:sticky;top:-22px;z-index:2;background:#081823;padding:4px 0 14px}
 body.report-modal-open{overflow:hidden}
-@media(max-width:700px){#reportPanel.report-modal{padding:10px}#reportPanel .report-modal-card{width:100%;max-height:calc(100vh - 20px);padding:16px}}
+@media(max-width:700px){#reportPanel.report-modal,#corCommandModal.report-modal{padding:10px}#reportPanel .report-modal-card,#corCommandModal .report-modal-card{width:100%;max-height:calc(100vh - 20px);padding:16px}}
 </style></head>
 <body><header class="top"><div><b>eCOR SYSTEM</b><span>OPERASI</span></div><button id="logout" class="ghost">LOG KELUAR</button></header><main class="shell">
 <section class="hero"><p>DASHBOARD OPERASI</p><h1 id="nama">Pengguna eCOR</h1><div id="profil">Memuatkan profil...</div></section>
@@ -32,4 +32,4 @@ body.report-modal-open{overflow:hidden}
 <section class="panel"><h2>Arahan Diterima</h2><div id="instructionList" class="message-list"><p class="muted">Tiada arahan.</p></div></section>
 <section class="panel"><div class="section-head history-section-head"><h2>Sejarah Komunikasi</h2><button id="toggleHistory" type="button" class="ghost" aria-expanded="false">PAPAR</button></div><div id="historyList" class="message-list" hidden><p class="muted">Tiada komunikasi.</p></div></section>
 <section class="panel"><h2>Carta Operasi</h2><p class="muted">Ruang ini dikekalkan untuk carta yang akan ditambah kemudian.</p></section>
-</main><script type="module" src="js/dashboard.js?v=20261009-064-log-popup"></script></body></html>
+</main><script type="module" src="js/dashboard.js?v=20261010-066-hantar-arahan-cor"></script></body></html>
