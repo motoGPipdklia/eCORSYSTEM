@@ -25,6 +25,16 @@ function setupCorTopMenu(){
   if(chronologyBtn) chronologyBtn.style.display='none';
   if(victimBtn) victimBtn.style.display='none';
 
+  // FIX 074: Arahan baharu COR tidak lagi dipaparkan terus pada panel
+  // "Arahan Diterima" di dashboard. Semua arahan mesti melalui
+  // MENU > PETI MASUK > ARAHAN terlebih dahulu.
+  const oldInstructionList=$('#instructionList');
+  const oldInstructionPanel=oldInstructionList?.closest('section.panel');
+  if(oldInstructionPanel){
+    oldInstructionPanel.hidden=true;
+    oldInstructionPanel.style.setProperty('display','none','important');
+  }
+
   // FIX 061: LOG KOMUNIKASI COR berfungsi seperti PERGERAKAN MANGSA.
   // Panel Sejarah Komunikasi ditutup secara default dan hanya dibuka melalui menu ⋮.
   const historyList=$('#historyList');
@@ -253,8 +263,32 @@ async function loadCorInboxModal(type){
     return;
   }
 
-  // ARAHAN pula hanya arahan yang masih berada dalam Peti Masuk COR.
-  box.innerHTML=rows.length?rows.map(messageCard).join(''):'<p class="muted">Tiada arahan dalam Peti Masuk COR.</p>';
+  // FIX 074: ARAHAN baharu mesti berada di PETI MASUK dahulu.
+  // Ia hanya keluar daripada Peti Masuk selepas BALAS berjaya (status DITERIMA).
+  box.innerHTML=rows.length ? rows.map(x=>`
+    <article class="message">
+      <div class="message-head">
+        <span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span>
+        <b>ARAHAN • ${esc(x.dari?.kod||'-')} → ${esc(x.kepada?.kod||'COR')}</b>
+        <small>${esc(fmt(x.created_at))}</small>
+      </div>
+      <h3>${esc(x.tajuk)}</h3>
+      <p>${esc(x.kandungan)}</p>
+      <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
+      <div class="message-actions">
+        <button data-instruction-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
+        <button data-instruction-reply="${x.id}">BALAS</button>
+      </div>
+    </article>`).join('') : '<p class="muted">Tiada arahan dalam Peti Masuk COR.</p>';
+  box.querySelectorAll('[data-instruction-action]').forEach(b=>b.onclick=async()=>{
+    await setMessageStatus(b.dataset.instructionAction,'DALAM_TINDAKAN');
+    await loadCorInboxModal('ARAHAN');
+  });
+  box.querySelectorAll('[data-instruction-reply]').forEach(b=>b.onclick=async()=>{
+    const row=rows.find(x=>x.id===b.dataset.instructionReply);
+    await replyInstruction(row);
+    await loadCorInboxModal('ARAHAN');
+  });
 }
 
 // ===== FIX 064: LOG KOMUNIKASI COR DALAM POPUP SENDIRI =====
