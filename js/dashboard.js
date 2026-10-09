@@ -138,6 +138,7 @@ async function loadAssignment() {
   $('#status').textContent = 'Penugasan aktif dimuatkan.';
   await loadCommunication();
   await renderControlRoom();
+  await renderBhaModule();
   await renderAcccRoom();
   await renderIcpRoom();
   await renderIcpTriageStatus();
@@ -212,10 +213,18 @@ async function loadCommunication() {
   }
 
   const allRows = data || [];
-  const rows = allRows.filter(x =>
+  let rows = allRows.filter(x =>
     x.dari_tempat_tugas_id === assignment.tempat_tugas_id ||
     x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
   );
+  // FIX 045: pada dashboard BHA, komunikasi yang kelihatan hanya COR ⇄ BHA.
+  if (String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() === 'BHA') {
+    rows = rows.filter(x => {
+      const from = String(x.dari?.kod || '').trim().toUpperCase();
+      const to = String(x.kepada?.kod || '').trim().toUpperCase();
+      return (from === 'BHA' && to === 'COR') || (from === 'COR' && to === 'BHA');
+    });
+  }
   const instructions = rows.filter(x =>
     x.jenis === 'ARAHAN' &&
     x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
@@ -630,6 +639,7 @@ async function setMessageStatus(id, status) {
   if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ICP') await loadIcpInbox();
+  if (assignment?.ecor_tempat_tugas?.kod === 'BHA') await loadBhaInbox();
   await loadCommunication();
 }
 
@@ -683,6 +693,116 @@ async function replyInstruction(source) {
   if (assignment?.ecor_tempat_tugas?.kod === 'COR') await loadCorInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ICP') await loadIcpInbox();
+  if (assignment?.ecor_tempat_tugas?.kod === 'BHA') await loadBhaInbox();
+  await loadCommunication();
+}
+
+
+// ===== FIX 046: BHA — BODY HOLDING AREA / SALURAN KHAS ICP ⇄ BHA =====
+const isBha = () => String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() === 'BHA';
+
+async function renderBhaModule() {
+  $('#bhaPanel')?.remove();
+  if (!isBha()) return;
+
+  // BHA mesti berada terus di bawah ICP. Ini mengunci penghantaran laporan BHA → ICP.
+  if (!parentPlace || String(parentPlace.kod || '').trim().toUpperCase() !== 'ICP') {
+    $('#status').textContent = 'BHA belum dipautkan kepada ICP. Jalankan SQL FIX 046 di Supabase.';
+    $('#openReport').disabled = true;
+  }
+
+  const panel = document.createElement('section');
+  panel.id = 'bhaPanel';
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">BODY HOLDING AREA</p>
+        <h2>BHA — Komunikasi Dengan ICP</h2>
+        <p class="muted">Saluran komunikasi khas BHA. Laporan hanya dihantar kepada ICP dan arahan hanya diterima daripada ICP.</p>
+      </div>
+      <button id="bhaRefresh" class="ghost">MUAT SEMULA</button>
+    </div>
+    <div class="cor-metrics">
+      <div><small>ARAHAN ICP</small><strong id="bhaTotal">0</strong></div>
+      <div><small>DALAM TINDAKAN</small><strong id="bhaAction">0</strong></div>
+    </div>
+    <h3>Arahan Diterima Daripada ICP</h3>
+    <div id="bhaInbox" class="message-list"><p class="muted">Memuatkan arahan ICP...</p></div>
+    <hr>
+    <h3>Laporan BHA kepada ICP</h3>
+    <p class="muted">Gunakan HANTAR LAPORAN untuk menghantar maklumat BHA terus kepada ICP.</p>
+    <button id="bhaOpenReport">HANTAR LAPORAN KE ICP</button>`;
+  document.querySelector('main').appendChild(panel);
+  $('#bhaRefresh').onclick = loadBhaInbox;
+  $('#bhaOpenReport').onclick = () => {
+    if (!parentPlace || String(parentPlace.kod || '').trim().toUpperCase() !== 'ICP') {
+      alert('Saluran BHA → ICP tidak tersedia. Jalankan SQL FIX 046.');
+      return;
+    }
+    setReportModeForCurrentRoute();
+    $('#reportPanel').classList.remove('hidden');
+    $('#reportPanel').scrollIntoView({ behavior:'smooth', block:'start' });
+    $('#reportTitle')?.focus();
+  };
+  await loadBhaInbox();
+}
+
+async function loadBhaInbox() {
+  if (!isBha()) return;
+  const { data, error } = await supabase
+    .from('ecor_komunikasi')
+    .select(`
+      id,jenis,tajuk,kandungan,keutamaan,status,created_at,pengirim_id,
+      dari_tempat_tugas_id,kepada_tempat_tugas_id,
+      dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
+      kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
+    `)
+    .eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id)
+    .eq('jenis', 'ARAHAN')
+    .neq('status', 'DITERIMA')
+    .order('created_at', { ascending:false });
+
+  const box = $('#bhaInbox');
+  if (error) { box.innerHTML = `<p class="status">${esc(error.message)}</p>`; return; }
+  // Keselamatan aplikasi: BHA hanya memaparkan arahan yang benar-benar datang daripada ICP.
+  const rows = (data || []).filter(x => String(x.dari?.kod || '').trim().toUpperCase() === 'ICP');
+  $('#bhaTotal').textContent = rows.length;
+  $('#bhaAction').textContent = rows.filter(x => x.status === 'DALAM_TINDAKAN').length;
+  box.innerHTML = rows.length ? rows.map(x => `
+    <article class="message">
+      <div class="message-head"><span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span><b>ICP → BHA</b><small>${esc(fmt(x.created_at))}</small></div>
+      <h3>${esc(x.tajuk || '-')}</h3><p>${esc(x.kandungan || '-')}</p>
+      <div class="message-route">STATUS: ${esc(x.status === 'DALAM_TINDAKAN' ? 'DALAM TINDAKAN' : x.status)}</div>
+      <div class="message-actions"><button data-bha-action="${x.id}" class="ghost">DALAM TINDAKAN</button><button data-bha-reply="${x.id}">BALAS</button></div>
+    </article>`).join('') : '<p class="muted">Tiada arahan ICP diterima.</p>';
+  box.querySelectorAll('[data-bha-action]').forEach(b => b.onclick = () => setMessageStatus(b.dataset.bhaAction, 'DALAM_TINDAKAN'));
+  box.querySelectorAll('[data-bha-reply]').forEach(b => b.onclick = () => replyBhaToIcp(rows.find(x => x.id === b.dataset.bhaReply)));
+}
+
+async function replyBhaToIcp(source) {
+  if (!source || String(source.dari?.kod || '').trim().toUpperCase() !== 'ICP') return;
+  const body = prompt('Catatan balasan BHA kepada ICP:');
+  if (!body?.trim()) return;
+  const sent = await supabase.from('ecor_komunikasi').insert({
+    operasi_id: assignment.operasi_id,
+    pengirim_id: session.user.id,
+    dari_tempat_tugas_id: assignment.tempat_tugas_id,
+    kepada_tempat_tugas_id: source.dari_tempat_tugas_id,
+    jenis: 'LAPORAN',
+    tajuk: (source.tajuk || 'MAKLUM BALAS BHA').trim(),
+    kandungan: body.trim(),
+    keutamaan: source.keutamaan || 'BIASA',
+    status: 'DIHANTAR'
+  });
+  if (sent.error) { alert(sent.error.message); return; }
+  const done = await supabase.from('ecor_komunikasi').update({ status:'DITERIMA' })
+    .eq('id', source.id).eq('operasi_id', assignment.operasi_id)
+    .eq('kepada_tempat_tugas_id', assignment.tempat_tugas_id);
+  if (done.error) { alert(`Balasan dihantar ke ICP, tetapi status arahan asal gagal dikemas kini: ${done.error.message}`); }
+  else alert('Balasan BHA berjaya dihantar kepada ICP.');
+  await loadBhaInbox();
   await loadCommunication();
 }
 
@@ -804,14 +924,53 @@ async function renderIcpRoom() {
     </div>
     <h3>Peti Masuk ICP</h3>
     <p class="muted">Laporan daripada submodul di bawah ICP dipaparkan di sini.</p>
-    <div id="icpInbox" class="message-list"><p class="muted">Memuatkan laporan...</p></div>`;
+    <div id="icpInbox" class="message-list"><p class="muted">Memuatkan laporan...</p></div>
+    <hr>
+    <h3>Arahan ICP kepada BHA</h3>
+    <p class="muted">ICP boleh menghantar arahan terus kepada BODY HOLDING AREA (BHA).</p>
+    <button id="icpToBha">HANTAR ARAHAN KE BHA</button>`;
 
   const anchor = document.querySelector('#chronologyPanel');
   if (anchor) anchor.insertAdjacentElement('afterend', panel);
   else document.querySelector('main').appendChild(panel);
 
   $('#refreshIcpInbox').onclick = loadIcpInbox;
+  $('#icpToBha').onclick = sendIcpInstructionToBha;
   await loadIcpInbox();
+}
+
+
+async function sendIcpInstructionToBha() {
+  if (String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() !== 'ICP') return;
+  const { data: bha, error: bhaError } = await supabase
+    .from('ecor_tempat_tugas')
+    .select('id,kod,nama,parent_id')
+    .eq('kod', 'BHA')
+    .maybeSingle();
+  if (bhaError || !bha) { alert(`BHA tidak ditemui. ${bhaError?.message || 'Jalankan SQL FIX 046.'}`); return; }
+  if (String(bha.parent_id || '') !== String(assignment.tempat_tugas_id || '')) {
+    alert('BHA belum dipautkan terus kepada ICP. Jalankan SQL FIX 046.');
+    return;
+  }
+  const tajuk = prompt('PERKARA / TAJUK arahan kepada BHA:');
+  if (!tajuk?.trim()) return;
+  const catatan = prompt('CATATAN / ARAHAN kepada BHA:');
+  if (!catatan?.trim()) return;
+  const keutamaan = (prompt('KEUTAMAAN: BIASA / PENTING / KRITIKAL', 'BIASA') || 'BIASA').trim().toUpperCase();
+  const { error } = await supabase.from('ecor_komunikasi').insert({
+    operasi_id: assignment.operasi_id,
+    pengirim_id: session.user.id,
+    dari_tempat_tugas_id: assignment.tempat_tugas_id,
+    kepada_tempat_tugas_id: bha.id,
+    jenis: 'ARAHAN',
+    tajuk: tajuk.trim(),
+    kandungan: catatan.trim(),
+    keutamaan: ['BIASA','PENTING','KRITIKAL'].includes(keutamaan) ? keutamaan : 'BIASA',
+    status: 'DIHANTAR'
+  });
+  if (error) { alert(`Gagal menghantar arahan ICP → BHA: ${error.message}`); return; }
+  alert('Arahan ICP berjaya dihantar kepada BHA.');
+  await loadCommunication();
 }
 
 async function loadIcpInbox() {
