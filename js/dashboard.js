@@ -920,7 +920,7 @@ function messageCard(m) {
   return `<article class="message">
     <div class="message-head">
       <span class="badge ${esc(m.keutamaan)}">${esc(m.keutamaan)}</span>
-      <b>${esc(m.jenis)}</b>
+      <b>${esc(m.jenis === 'MAKLUM_BALAS' ? 'MAKLUM BALAS' : m.jenis)}</b>
       <small>${esc(fmt(m.created_at))}</small>
     </div>
     <h3>${esc(m.tajuk)}</h3>
