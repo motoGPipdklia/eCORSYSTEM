@@ -41,6 +41,7 @@ function setupCorTopMenu(){
           </div>
         </div>
         <button type="button" data-cor-menu="movement">PERGERAKAN MANGSA</button>
+        <button type="button" data-cor-menu="communication-log">LOG KOMUNIKASI</button>
       </div>`;
     header.insertBefore(wrap,header.firstChild);
   }
@@ -99,6 +100,16 @@ function setupCorTopMenu(){
           panel.hidden=false;
           panel.scrollIntoView({behavior:'smooth',block:'start'});
           loadVictimMovements();
+        }
+      }
+      if(action==='communication-log'){
+        const historyList=$('#historyList');
+        const historyToggle=$('#toggleHistory');
+        const historyPanel=historyList?.closest('section.panel');
+        if(historyList && historyToggle){
+          const isClosed=historyList.hidden || historyList.style.display==='none';
+          if(isClosed) historyToggle.click();
+          historyPanel?.scrollIntoView({behavior:'smooth',block:'start'});
         }
       }
     });
