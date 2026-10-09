@@ -604,11 +604,26 @@ $('#openReport')?.addEventListener('click', () => {
   if (!assignment || !parentPlace) return;
   setReportModeForCurrentRoute();
   $('#reportPanel').classList.remove('hidden');
-  $('#reportPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.body.classList.add('report-modal-open');
+  setTimeout(()=>$('#reportTitle')?.focus(),0);
 });
 
 $('#closeReport')?.addEventListener('click', () => {
   $('#reportPanel').classList.add('hidden');
+  document.body.classList.remove('report-modal-open');
+});
+
+$('#reportPanel')?.addEventListener('click',(e)=>{
+  if(e.target?.id==='reportPanel'){
+    $('#reportPanel').classList.add('hidden');
+    document.body.classList.remove('report-modal-open');
+  }
+});
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape' && !$('#reportPanel')?.classList.contains('hidden')){
+    $('#reportPanel').classList.add('hidden');
+    document.body.classList.remove('report-modal-open');
+  }
 });
 
 $('#reportForm')?.addEventListener('submit', async (e) => {
@@ -696,7 +711,7 @@ async function renderControlRoom() {
     }
     setReportModeForCurrentRoute();
     $('#reportPanel').classList.remove('hidden');
-    $('#reportPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.body.classList.add('report-modal-open');
     $('#reportTitle')?.focus();
   };
   await loadCorInbox();
@@ -882,7 +897,7 @@ async function renderBhaModule() {
     }
     setReportModeForCurrentRoute();
     $('#reportPanel').classList.remove('hidden');
-    $('#reportPanel').scrollIntoView({ behavior:'smooth', block:'start' });
+    document.body.classList.add('report-modal-open');
     $('#reportTitle')?.focus();
   };
   await loadBhaInbox();
