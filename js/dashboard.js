@@ -1432,8 +1432,7 @@ async function renderCorAduStatus(){
   p.className='panel';
   p.hidden=true;
   p.style.setProperty('display','none','important');
-  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Status Mangsa Keseluruhan</h2><p class="muted">VIEW ONLY — status terkini setiap mangsa berdasarkan rekod TRIAGE dan ADU, termasuk mangsa ke SRC, BHA, Hospital dan PMA serta status pertemuan dengan waris. Mangsa yang sama dikira sekali sahaja.</p></div><div class="adu-actions"><button id="corAduRefresh" class="ghost">MUAT SEMULA</button><button id="corAduClose" class="ghost">TUTUP</button></div></div>
-  <div id="corAduTable"><p class="muted">Tekan MANGSA KESELURUHAN untuk memaparkan data.</p></div>
+  p.innerHTML=`<div class="section-head"><div><p class="eyebrow">MANGSA KESELURUHAN</p><h2>Jumlah Keseluruhan</h2><p class="muted">Klik mana-mana kategori untuk melihat butiran mangsa. Mangsa yang sama dikira sekali sahaja.</p></div><div class="adu-actions"><button id="corAduRefresh" class="ghost">MUAT SEMULA</button><button id="corAduClose" class="ghost">TUTUP</button></div></div>
   <div id="corAduSummary"></div>
   <p id="corAduStatus" class="status"></p>`;
   // FIX 028: Paparan Mangsa Keseluruhan diletakkan DI DALAM ruangan Carta Operasi.
@@ -1529,7 +1528,7 @@ async function loadCorAduStatus(){
     return m.destinasi||String(m.status_lokasi||'-').replaceAll('_',' ');
   };
 
-  if(box)box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:900px"><thead><tr><th style="width:80px">BIL</th><th>ID MANGSA</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><b>${esc(m.no_mangsa||'-')}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} <span>${esc(m.tag_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-destination">${esc(statusDestinasi(m))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa direkodkan.</p>';
+  // FIX 052: Jadual Status Mangsa Keseluruhan tidak dipaparkan pada paparan utama COR.
 
   const countTag=t=>rows.filter(m=>String(m.tag_semasa||'').toUpperCase()===t).length;
   const countGender=g=>rows.filter(m=>normGender(m.jantina)===g).length;
