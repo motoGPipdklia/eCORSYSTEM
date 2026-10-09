@@ -141,6 +141,7 @@ async function loadAssignment() {
   await renderBhaModule();
   await renderAcccRoom();
   await renderIcpRoom();
+  await renderGenericParentInbox();
   await renderIcpTriageStatus();
   await renderAduModule();
   await renderTriageModule();
@@ -603,11 +604,13 @@ async function loadCorInbox() {
       <div class="message-actions">
         <button data-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
         <button data-reply="${x.id}">BALAS</button>
+        ${parentPlace ? `<button data-cor-forward="${x.id}" ${x.status === 'DIMAJUKAN' ? 'disabled' : ''}>${x.status === 'DIMAJUKAN' ? 'TELAH DIMAJUKAN' : 'MAJU KE SALURAN ATASAN'}</button>` : ''}
       </div>
     </article>`).join('') : '<p class="muted">Tiada laporan diterima.</p>';
 
   box.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.action,'DALAM_TINDAKAN'));
   box.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.reply)));
+  box.querySelectorAll('[data-cor-forward]').forEach(b=>b.onclick=()=>forwardReportToParent(rows.find(x=>x.id===b.dataset.corForward), b));
 }
 
 async function setMessageStatus(id, status) {
@@ -640,6 +643,7 @@ async function setMessageStatus(id, status) {
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ICP') await loadIcpInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'BHA') await loadBhaInbox();
+  if ($('#genericInboxList')) await loadGenericParentInbox();
   await loadCommunication();
 }
 
@@ -694,6 +698,7 @@ async function replyInstruction(source) {
   if (assignment?.ecor_tempat_tugas?.kod === 'ACCC') await loadAcccInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'ICP') await loadIcpInbox();
   if (assignment?.ecor_tempat_tugas?.kod === 'BHA') await loadBhaInbox();
+  if ($('#genericInboxList')) await loadGenericParentInbox();
   await loadCommunication();
 }
 
@@ -897,6 +902,95 @@ async function loadAcccInbox() {
 }
 
 
+
+// ===== FIX 049: PETI MASUK STANDARD UNTUK MODUL INDUK =====
+// Semua submodul menghantar LAPORAN ke parent. Modul induk menerima laporan di
+// Peti Masuk dan boleh DALAM TINDAKAN, BALAS atau MAJU KE SALURAN ATASAN.
+async function renderGenericParentInbox() {
+  $('#genericParentInbox')?.remove();
+  const code = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
+  if (!assignment || ['COR','ICP','ACCC','BHA'].includes(code)) return;
+
+  const { data: children, error } = await supabase
+    .from('ecor_tempat_tugas')
+    .select('id,kod,nama')
+    .eq('parent_id', assignment.tempat_tugas_id)
+    .order('kod');
+  if (error || !(children || []).length) return;
+
+  const panel = document.createElement('section');
+  panel.id = 'genericParentInbox';
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="section-head">
+      <div><p class="eyebrow">PETI MASUK MODUL</p><h2>${esc(code)} — Peti Masuk Laporan Submodul</h2></div>
+      <button id="genericInboxRefresh" class="ghost">MUAT SEMULA</button>
+    </div>
+    <div class="cor-metrics">
+      <div><small>LAPORAN MASUK</small><strong id="genericInboxTotal">0</strong></div>
+      <div><small>BELUM DIBACA</small><strong id="genericInboxNew">0</strong></div>
+      <div><small>KRITIKAL</small><strong id="genericInboxCritical">0</strong></div>
+      <div><small>DALAM TINDAKAN</small><strong id="genericInboxAction">0</strong></div>
+    </div>
+    <p class="muted">Laporan daripada submodul di bawah ${esc(code)} masuk ke Peti Masuk ini.</p>
+    <div id="genericInboxList" class="message-list"><p class="muted">Memuatkan laporan...</p></div>`;
+  const anchor = $('#chronologyPanel');
+  if (anchor) anchor.insertAdjacentElement('afterend', panel); else document.querySelector('main').appendChild(panel);
+  $('#genericInboxRefresh').onclick = loadGenericParentInbox;
+  await loadGenericParentInbox();
+}
+
+async function loadGenericParentInbox() {
+  const box = $('#genericInboxList');
+  if (!box || !assignment) return;
+  const { data, error } = await supabase.from('ecor_komunikasi').select(`
+    id,jenis,tajuk,kandungan,keutamaan,status,created_at,pengirim_id,
+    dari_tempat_tugas_id,kepada_tempat_tugas_id,
+    dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),
+    kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
+  `).eq('operasi_id',assignment.operasi_id).eq('kepada_tempat_tugas_id',assignment.tempat_tugas_id)
+    .eq('jenis','LAPORAN').neq('status','DITERIMA').order('created_at',{ascending:false});
+  if (error) { box.innerHTML=`<p class="status">${esc(error.message)}</p>`; return; }
+
+  const { data: children } = await supabase.from('ecor_tempat_tugas').select('id').eq('parent_id',assignment.tempat_tugas_id);
+  const childIds = new Set((children||[]).map(x=>String(x.id)));
+  const rows=(data||[]).filter(x=>childIds.has(String(x.dari_tempat_tugas_id)));
+  $('#genericInboxTotal').textContent=rows.length;
+  $('#genericInboxNew').textContent=rows.filter(x=>['DIHANTAR','BARU'].includes(x.status)).length;
+  $('#genericInboxCritical').textContent=rows.filter(x=>x.keutamaan==='KRITIKAL').length;
+  $('#genericInboxAction').textContent=rows.filter(x=>x.status==='DALAM_TINDAKAN').length;
+  box.innerHTML=rows.length?rows.map(x=>`
+    <article class="message">
+      <div class="message-head"><span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span><b>${esc(x.dari?.kod||'-')} → ${esc(assignment.ecor_tempat_tugas?.kod||'-')}</b><small>${esc(fmt(x.created_at))}</small></div>
+      <h3>${esc(x.tajuk)}</h3><p>${esc(x.kandungan)}</p>
+      <div class="message-route">STATUS: ${esc(x.status==='DALAM_TINDAKAN'?'DALAM TINDAKAN':(x.status==='DIMAJUKAN'?'TELAH DIMAJUKAN KE SALURAN ATASAN':x.status))}</div>
+      <div class="message-actions">
+        <button data-generic-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
+        <button data-generic-reply="${x.id}">BALAS</button>
+        ${parentPlace?`<button data-generic-forward="${x.id}" ${x.status==='DIMAJUKAN'?'disabled':''}>${x.status==='DIMAJUKAN'?'TELAH DIMAJUKAN':'MAJU KE SALURAN ATASAN'}</button>`:''}
+      </div>
+    </article>`).join(''):'<p class="muted">Tiada laporan submodul diterima.</p>';
+  box.querySelectorAll('[data-generic-action]').forEach(b=>b.onclick=()=>setMessageStatus(b.dataset.genericAction,'DALAM_TINDAKAN'));
+  box.querySelectorAll('[data-generic-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.genericReply)));
+  box.querySelectorAll('[data-generic-forward]').forEach(b=>b.onclick=()=>forwardReportToParent(rows.find(x=>x.id===b.dataset.genericForward),b));
+}
+
+async function forwardReportToParent(source, button) {
+  if (!source?.id || !assignment || !parentPlace) { alert('Saluran atasan tidak tersedia.'); return; }
+  const currentCode=String(assignment.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
+  if (!confirm(`Majukan laporan "${source.tajuk||'-'}" dari ${source.dari?.kod||'submodul'} ke ${parentPlace.kod}?`)) return;
+  if(button){button.disabled=true;button.textContent='SEDANG DIMAJUKAN...';}
+  const origin=source.dari?.kod||'-';
+  const content=`PENGHANTAR ASAL: ${origin}\nDIMAJUKAN OLEH: ${currentCode}\n\n${source.kandungan||''}`;
+  const sent=await supabase.from('ecor_komunikasi').insert({operasi_id:assignment.operasi_id,pengirim_id:session.user.id,dari_tempat_tugas_id:assignment.tempat_tugas_id,kepada_tempat_tugas_id:parentPlace.id,jenis:'LAPORAN',tajuk:source.tajuk,kandungan:content,keutamaan:source.keutamaan||'BIASA',status:'DIHANTAR'}).select('id').single();
+  if(sent.error){if(button){button.disabled=false;button.textContent='MAJU KE SALURAN ATASAN';}alert(`Gagal memajukan laporan: ${sent.error.message}`);return;}
+  const marked=await supabase.from('ecor_komunikasi').update({status:'DIMAJUKAN'}).eq('id',source.id).eq('operasi_id',assignment.operasi_id).eq('kepada_tempat_tugas_id',assignment.tempat_tugas_id).select('id,status').maybeSingle();
+  if(marked.error||!marked.data){alert(`Laporan sudah dihantar ke ${parentPlace.kod}, tetapi status DIMAJUKAN gagal disimpan. ${marked.error?.message||''}`);}
+  else alert(`Laporan berjaya dimajukan ke ${parentPlace.kod}. Rekod asal kekal dalam Peti Masuk sehingga BALAS.`);
+  if(currentCode==='COR') await loadCorInbox(); else await loadGenericParentInbox();
+  await loadCommunication();
+}
+
 // ===== ICP PETI MASUK =====
 async function renderIcpRoom() {
   const old = document.querySelector('#icpControlPanel');
@@ -1055,7 +1149,7 @@ async function forwardIcpReport(source, button) {
     kepada_tempat_tugas_id: parentPlace.id,
     jenis: 'LAPORAN',
     tajuk: source.tajuk,
-    kandungan: source.kandungan,
+    kandungan: `PENGHANTAR ASAL: ${source.dari?.kod || '-'}\nDIMAJUKAN OLEH: ICP\n\n${source.kandungan || ''}`,
     keutamaan: source.keutamaan || 'BIASA',
     status: 'DIHANTAR'
   };
