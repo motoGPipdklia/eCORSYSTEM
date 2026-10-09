@@ -1064,6 +1064,10 @@ async function renderControlRoom() {
   const code = assignment?.ecor_tempat_tugas?.kod;
   if (code !== 'COR') return;
 
+  // FIX 075 — Panel lama CONTROL ROOM disembunyikan pada dashboard COR.
+  // Fungsi Peti Masuk / Hantar Laporan kekal melalui menu dan kad utama.
+  return;
+
   const panel = document.createElement('section');
   panel.id = 'controlRoomPanel';
   panel.className = 'panel';
