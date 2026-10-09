@@ -932,22 +932,24 @@ async function forwardIcpReport(source, button) {
 }
 
 // ===== FIX 035: PERGERAKAN MANGSA BERPUSAT =====
-const movementCodes=['TRIAGE','ADU','SRC','BHA','PMA'];
+const movementCodes=['TRIAGE','ADU','SRC','BHA','HOSPITAL','PMA'];
 const movementLabel=d=>({SRC:'MANGSA DALAM PERJALANAN KE SRC',ADU:'MANGSA DALAM PERJALANAN KE ADU',HOSPITAL:'MANGSA DALAM PERJALANAN KE HOSPITAL',BHA:'MANGSA KE BHA',PMA:'MANGSA DALAM PERJALANAN KE PMA'})[String(d||'').toUpperCase()]||`MANGSA DALAM PERJALANAN KE ${String(d||'-').toUpperCase()}`;
 async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
  const payload={operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||null,asal:String(asal).toUpperCase(),destinasi:String(destinasi).toUpperCase(),destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
  const q=await supabase.from('ecor_pergerakan_mangsa').insert(payload).select('id').single();
  if(q.error){alert(`Gagal merekod pergerakan mangsa: ${q.error.message}`);return null} return q.data;
 }
-function movementDuration(v){if(!v)return'-';const ms=Date.now()-new Date(v).getTime();if(!Number.isFinite(ms)||ms<0)return'-';const min=Math.floor(ms/60000),h=Math.floor(min/60);return h?`${h} jam ${min%60} minit`:`${min} minit`;}
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
  const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Notifikasi perjalanan mangsa antara TRIAGE, ADU, SRC, HOSPITAL, BHA dan PMA. Lokasi penerima perlu mengesahkan ketibaan.</p></div><button id="movementRefresh" class="ghost">MUAT SEMULA</button></div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
  const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements; await loadVictimMovements();
 }
 async function loadVictimMovements(){
- const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; const q=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}); const box=$('#movementList');if(!box)return;if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const rows=q.data||[];
- box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1100px"><thead><tr><th>BIL</th><th>NOTIFIKASI</th><th>ID MANGSA</th><th>TAG</th><th>ASAL</th><th>DESTINASI</th><th>MASA BERTOLAK</th><th>TEMPOH</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td><strong>${esc(movementLabel(m.destinasi))}</strong></td><td><b>${esc(m.no_mangsa)}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(m.asal)}</td><td>${esc(m.destinasi_nama||m.destinasi)}</td><td>${esc(fmt(m.masa_bertolak))}</td><td>${esc(movementDuration(m.masa_bertolak))}</td><td>${esc(m.catatan||'-')}</td><td>${m.destinasi===code?`<button data-confirm-move="${m.id}">SAHKAN TIBA DI ${esc(code)}</button>`:'<span class="muted">DALAM PERJALANAN</span>'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa dalam perjalanan.</p>';
+ const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return;
+ const q=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).in('status',['DALAM_PERJALANAN','TIBA']).order('masa_bertolak',{ascending:false}).limit(100);
+ const box=$('#movementList');if(!box)return;if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const rows=q.data||[];
+ const notif=m=>String(m.status).toUpperCase()==='TIBA'?`MANGSA TELAH TIBA DI ${String(m.destinasi||'-').toUpperCase()}`:movementLabel(m.destinasi);
+ box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1180px"><thead><tr><th>BIL</th><th>NOTIFIKASI</th><th>ID MANGSA</th><th>TAG</th><th>ASAL</th><th>DESTINASI</th><th>MASA BERTOLAK</th><th>MASA SAMPAI</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td><strong>${esc(notif(m))}</strong></td><td><b>${esc(m.no_mangsa)}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(m.asal)}</td><td>${esc(m.destinasi_nama||m.destinasi)}</td><td>${esc(fmt(m.masa_bertolak))}</td><td>${m.masa_tiba?esc(fmt(m.masa_tiba)):'-'}</td><td>${esc(m.catatan||'-')}</td><td>${String(m.status).toUpperCase()==='TIBA'?'<span class="adu-status-active"><b>TIBA</b></span>':(m.destinasi===code?`<button data-confirm-move="${m.id}">SAHKAN TIBA DI ${esc(code)}</button>`:'<span class="muted">DALAM PERJALANAN</span>')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada rekod pergerakan mangsa.</p>';
  box.querySelectorAll('[data-confirm-move]').forEach(b=>b.onclick=()=>confirmVictimArrival(rows.find(x=>x.id===b.dataset.confirmMove)));
 }
 async function confirmVictimArrival(m){
@@ -1155,7 +1157,7 @@ async function loadCorAduStatus(){
     supabase.from('ecor_adu_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
       .eq('operasi_id',assignment.operasi_id),
-    supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('status','DALAM_PERJALANAN')
+    supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).in('status',['DALAM_PERJALANAN','TIBA']).order('masa_bertolak',{ascending:false})
   ]);
 
   const box=$('#corAduTable'),summary=$('#corAduSummary'),status=$('#corAduStatus');
@@ -1181,9 +1183,10 @@ async function loadCorAduStatus(){
   (aduQ.data||[]).forEach(m=>consider(m,'ADU'));
   const rows=[...latest.values()].sort((a,b)=>a._masa-b._masa);
 
-  const movementByVictim=new Map((movementQ.data||[]).map(x=>[String(x.no_mangsa||'').trim().toUpperCase(),x]));
+  const movementByVictim=new Map();
+  (movementQ.data||[]).forEach(x=>{const k=String(x.no_mangsa||'').trim().toUpperCase();if(k&&!movementByVictim.has(k))movementByVictim.set(k,x);});
   const statusDestinasi=m=>{
-    const mv=movementByVictim.get(normKey(m)); if(mv)return movementLabel(mv.destinasi);
+    const mv=movementByVictim.get(normKey(m)); if(mv)return String(mv.status).toUpperCase()==='TIBA'?`TELAH TIBA DI ${String(mv.destinasi||'-').toUpperCase()}`:movementLabel(mv.destinasi);
     const loc=locOf(m);
     if(loc==='DALAM_TRIAGE')return 'DALAM TRIAGE';
     if(loc==='DALAM_ADU'||loc==='ADU')return 'DALAM ADU';
@@ -1521,7 +1524,7 @@ async function loadSrcData(){
  const moved=rows.filter(m=>!['DALAM_PERJALANAN','DALAM_SRC','DOKUMENTASI','MENUNGGU_PMA'].includes(String(m.status_lokasi||'').toUpperCase()));
  const tag=t=>active.filter(m=>String(m.tag_src_semasa||'').toUpperCase()===t).length;
  $('#srcPerjalanan').textContent=travelling.length;$('#srcHijau').textContent=tag('HIJAU');$('#srcKuning').textContent=tag('KUNING');$('#srcDokSelesai').textContent=active.filter(m=>m.status_dokumentasi==='SELESAI').length;$('#srcJumlah').textContent=active.length;
- incomingBox.innerHTML=travelling.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1050px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>ASAL</th><th>TAG</th><th>JANTINA</th><th>MASA BERTOLAK</th><th>TEMPOH PERJALANAN</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${travelling.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td><b>${esc(m.sumber_asal||'-')}</b></td><td><span class="adu-tag">${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</span></td><td><span class="adu-gender">${esc(m.jantina||'BELUM DIKENALPASTI')}</span></td><td>${esc(fmt(m.masa_bertolak_src))}</td><td>${esc(srcTravelDuration(m.masa_bertolak_src))}</td><td>${esc(m.catatan||'-')}</td><td><button data-arrive="${m.id}">SAHKAN TIBA DI SRC</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa dalam perjalanan ke SRC.</p>';
+ incomingBox.innerHTML=travelling.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1050px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>ASAL</th><th>TAG</th><th>JANTINA</th><th>MASA BERTOLAK</th><th>MASA SAMPAI</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${travelling.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td><b>${esc(m.sumber_asal||'-')}</b></td><td><span class="adu-tag">${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</span></td><td><span class="adu-gender">${esc(m.jantina||'BELUM DIKENALPASTI')}</span></td><td>${esc(fmt(m.masa_bertolak_src))}</td><td>${m.masa_tiba_src?esc(fmt(m.masa_tiba_src)):'-'}</td><td>${esc(m.catatan||'-')}</td><td><button data-arrive="${m.id}">SAHKAN TIBA DI SRC</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa dalam perjalanan ke SRC.</p>';
  box.innerHTML=active.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1250px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA</th><th>JANTINA</th><th>TAG MASUK SRC</th><th>TAG SRC SEMASA</th><th>MASA TIBA</th><th>DOKUMENTASI</th><th>STATUS / DESTINASI</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${active.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${esc(m.nama_mangsa||'BELUM DIKENAL PASTI')}</td><td><span class="adu-gender">${esc(m.jantina||'BELUM DIKENALPASTI')}</span></td><td>${aduDot(m.tag_masuk_src)} ${esc(m.tag_masuk_src||'-')}</td><td><span class="adu-tag">${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</span></td><td>${esc(fmt(m.masa_tiba_src||m.masa_terima_src))}</td><td>${esc(m.status_dokumentasi==='SELESAI'?'SELESAI':'BELUM SELESAI')}</td><td class="adu-destination">${esc(String(m.status_lokasi||'DALAM_SRC').replaceAll('_',' '))}</td><td>${esc(m.catatan||'-')}</td><td><div class="adu-actions"><button class="ghost" data-su="${m.id}">KEMAS KINI TAG</button><button class="ghost" data-sd="${m.id}">DOKUMENTASI</button><button class="ghost" data-sp="${m.id}">KE PMA</button><button class="ghost" data-sm="${m.id}">PINDAH / KELUAR SRC</button><button class="ghost" data-sh="${m.id}">SEJARAH TAG</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada mangsa aktif di SRC.</p>';
  out.innerHTML=moved.length?`<div class="adu-wrap"><table class="adu-table"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>TAG AKHIR</th><th>DESTINASI</th><th>MASA KELUAR</th><th>CATATAN</th></tr></thead><tbody>${moved.map((m,i)=>`<tr><td>${i+1}</td><td><b>${esc(m.no_mangsa)}</b></td><td>${aduDot(m.tag_src_semasa)} ${esc(m.tag_src_semasa||'-')}</td><td class="adu-destination">${esc(m.destinasi||m.status_lokasi||'-')}</td><td>${esc(fmt(m.masa_keluar_src))}</td><td>${esc(m.catatan_pemindahan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada rekod keluar SRC.</p>';
  incomingBox.querySelectorAll('[data-arrive]').forEach(x=>x.onclick=()=>confirmSrcArrival(travelling.find(m=>m.id===x.dataset.arrive)));
