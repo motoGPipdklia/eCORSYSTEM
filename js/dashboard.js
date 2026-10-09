@@ -1297,8 +1297,12 @@ async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
 }
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
- const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(code==='COR')p.hidden=true;p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja. COR boleh melihat semua pergerakan mangsa.</p></div><button id="movementRefresh" class="ghost">MUAT SEMULA</button></div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
- const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements; await loadVictimMovements();
+ const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(code==='COR')p.hidden=true;
+ const movementActions=code==='COR'?`<div class="adu-actions"><button id="movementRefresh" class="ghost">MUAT SEMULA</button><button id="movementClose" class="ghost">TUTUP</button></div>`:`<button id="movementRefresh" class="ghost">MUAT SEMULA</button>`;
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja. COR boleh melihat semua pergerakan mangsa.</p></div>${movementActions}</div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
+ const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements;
+ if(code==='COR'&&$('#movementClose'))$('#movementClose').onclick=()=>{p.hidden=true;};
+ await loadVictimMovements();
 }
 async function loadVictimMovements(){
  const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return;
