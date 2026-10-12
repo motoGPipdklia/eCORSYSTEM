@@ -803,6 +803,7 @@ async function loadAssignment() {
   setupIcpTopMenu();
   setupTecTopMenu();
   setupTriageTopMenu();
+  setupSrcTopMenu();
 }
 
 
@@ -2953,6 +2954,82 @@ async function showTriageHistory(m){
  const q=await supabase.from('ecor_triage_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return}
  alert(`SEJARAH TAG TRIAGE — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
 }
+
+// ===== FIX 098: SRC — MENU 3 TITIK SEPERTI TRIAGE =====
+function getSrcChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section')||null;
+}
+function closeSrcMenuViews(){
+  const host=$('#srcChartContent');if(host){host.hidden=true;host.style.setProperty('display','none','important');}
+  const victim=$('#srcPanel');if(victim){victim.hidden=true;victim.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+  const chart=getSrcChartPanel();chart?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');
+}
+async function showSrcMenuView(kind){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='SRC')return;
+  const chart=getSrcChartPanel();if(!chart)return;
+  closeSrcMenuViews();chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');
+  if(kind==='MANGSA'){
+    const victim=$('#srcPanel');if(victim){victim.hidden=false;victim.style.removeProperty('display');await loadSrcData();chart.appendChild(victim);victim.scrollIntoView({behavior:'smooth',block:'start'});}return;
+  }
+  let host=$('#srcChartContent');if(!host){host=document.createElement('div');host.id='srcChartContent';host.style.marginTop='18px';chart.appendChild(host);}
+  host.hidden=false;host.style.removeProperty('display');
+  host.innerHTML=`<div class="section-head"><div><p class="eyebrow">SURVIVOR RECEPTION CENTRE</p><h2>Kronologi SRC</h2><p class="muted">Komunikasi yang melibatkan SRC bagi operasi semasa.</p></div><div class="adu-actions"><button id="srcChartRefresh" class="ghost">MUAT SEMULA</button><button id="srcChartClose" class="ghost">TUTUP</button></div></div><div id="srcChartBody"><p class="muted">Memuatkan...</p></div>`;
+  $('#srcChartClose').onclick=closeSrcMenuViews;$('#srcChartRefresh').onclick=loadSrcChronology;
+  await loadSrcChronology();chart.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadSrcChronology(){
+  const box=$('#srcChartBody');if(!box)return;
+  const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,status,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const srcId=assignment.tempat_tugas_id;
+  const rows=(q.data||[]).filter(x=>x.dari_tempat_tugas_id===srcId||x.kepada_tempat_tugas_id===srcId);
+  const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
+}
+function setupSrcTopMenu(){
+  const header=document.querySelector('header.top');const isSrc=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='SRC';if(!header||!isSrc)return;
+  let wrap=$('#srcTopMenu');
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='srcTopMenu';wrap.className='cor-top-menu';
+    wrap.innerHTML=`<button id="srcTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu SRC" aria-expanded="false">⋮</button>
+      <div id="srcTopMenuDropdown" class="cor-menu-dropdown" hidden>
+        <div class="cor-menu-parent" id="srcInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="srcInboxSubmenu" hidden>
+            <button type="button" data-src-menu="inbox-report">LAPORAN</button>
+            <button type="button" data-src-menu="inbox-instruction">ARAHAN</button>
+          </div>
+        </div>
+        <button type="button" data-src-menu="chronology">KRONOLOGI</button>
+        <button type="button" data-src-menu="victims">PENGURUSAN MANGSA</button>
+        <button type="button" data-src-menu="movement">NOTIFIKASI PERGERAKAN MANGSA</button>
+        <button type="button" data-src-menu="communication-log">LOG KOMUNIKASI</button>
+      </div>`;
+    header.insertBefore(wrap,header.firstChild);
+  }
+  const toggle=$('#srcTopMenuToggle'),drop=$('#srcTopMenuDropdown'),inboxMenu=$('#srcInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#srcInboxSubmenu');if(!toggle||!drop)return;
+  const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxBtn?.setAttribute('aria-expanded','false')};
+  const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxBtn?.setAttribute('aria-expanded','true')};
+  const close=()=>{drop.hidden=true;toggle.setAttribute('aria-expanded','false');closeInbox()};
+  if(toggle.dataset.bound!=='1'){
+    toggle.dataset.bound='1';toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};
+    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
+    drop.addEventListener('click',async e=>{const b=e.target.closest('[data-src-menu]');if(!b)return;const a=b.dataset.srcMenu;close();
+      if(a==='inbox-report')await openCorInbox('LAPORAN');
+      if(a==='inbox-instruction')await openCorInbox('ARAHAN');
+      if(a==='chronology')await showSrcMenuView('KRONOLOGI');
+      if(a==='victims')await showSrcMenuView('MANGSA');
+      if(a==='movement'){closeSrcMenuViews();const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}}
+      if(a==='communication-log'){closeSrcMenuViews();await openCorCommunicationLog();}
+    });
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  }
+  const victim=$('#srcPanel');if(victim&&!victim.dataset.menuManaged){victim.dataset.menuManaged='1';victim.hidden=true;victim.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+}
+
 // ===== FIX 032: SRC — SAHKAN MANGSA TIBA =====
 const isSrcSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='SRC' &&
  String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
