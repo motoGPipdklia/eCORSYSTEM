@@ -473,6 +473,7 @@ async function loadAssignment() {
   await renderIcpRoom();
   await renderGenericParentInbox();
   await renderIcpTriageStatus();
+  await renderIcpAdministration();
   await renderAduModule();
   await renderTriageModule();
   await renderSrcModule();
@@ -2495,6 +2496,162 @@ async function moveSrcVictim(m,statusLokasi,destinasi,note=''){
 }
 async function showSrcHistory(m){
  const q=await supabase.from('ecor_src_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return} alert(`SEJARAH TAG SRC — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}${x.catatan?`\n${x.catatan}`:''}`).join('\n\n')||'Tiada perubahan tag.'}`);
+}
+
+
+
+// ===== FIX 077: ICP — PENTADBIRAN & PENGUMPULAN MAKLUMAT =====
+async function renderIcpAdministration(){
+  $('#icpAdministrationPanel')?.remove();
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ICP') return;
+
+  // Panel mangsa ICP lama (view only) tidak digunakan lagi. FIX 077 menggantikannya
+  // dengan Jadual Mangsa yang menggabungkan data TRIAGE + rekod manual ICP.
+  $('#icpTriageStatusPanel')?.remove();
+  $('#icpOverallVictimPanel')?.remove();
+
+  const panel=document.createElement('section');
+  panel.id='icpAdministrationPanel';
+  panel.className='panel';
+  panel.innerHTML=`
+    <div class="section-head">
+      <div><p class="eyebrow">INCIDENT COMMAND POST</p><h2>ICP — Pentadbiran & Pengumpulan Maklumat</h2>
+      <p class="muted">Maklumat lapangan disatukan di ICP sebelum disalurkan kepada COR.</p></div>
+      <button id="icpAdminRefresh" type="button" class="ghost">MUAT SEMULA</button>
+    </div>
+    <div class="cor-metrics">
+      <div><small>RESPONDER</small><strong id="icpResponderMetric">0</strong></div>
+      <div><small>JUMLAH MANGSA ICP</small><strong id="icpVictimMetric">0</strong></div>
+      <div><small>KRONOLOGI</small><strong id="icpChronologyMetric">0</strong></div>
+      <div><small>PENERBANGAN</small><strong id="icpFlightMetric">0</strong></div>
+    </div>
+
+    <hr><div class="section-head"><div><h3>1. JADUAL RESPONDER</h3><p class="muted">Agensi, kekuatan pegawai/anggota, jentera dan kenderaan.</p></div><button id="icpAddResponder" type="button">TAMBAH RESPONDER</button></div>
+    <div id="icpResponderTable"><p class="muted">Memuatkan responder...</p></div>
+
+    <hr><div class="section-head"><div><h3>2. JADUAL MANGSA</h3><p class="muted">Data TRIAGE dimasukkan automatik. ICP juga boleh tambah rekod manual dan menetapkan jumlah rasmi operasi.</p></div><div class="adu-actions"><button id="icpSetVictimTotal" type="button" class="ghost">KEMAS KINI JUMLAH</button><button id="icpAddVictim" type="button">TAMBAH MANGSA</button></div></div>
+    <div class="cor-metrics"><div><small>DIREKOD SISTEM</small><strong id="icpSystemVictimCount">0</strong></div><div><small>MANUAL ICP</small><strong id="icpManualVictimCount">0</strong></div><div><small>JUMLAH RASMI ICP</small><strong id="icpOfficialVictimCount">0</strong></div></div>
+    <div id="icpVictimTable"><p class="muted">Memuatkan mangsa...</p></div>
+
+    <hr><div class="section-head"><div><h3>3. JADUAL KRONOLOGI</h3><p class="muted">Kronologi laporan, arahan dan maklumat yang diterima ICP.</p></div></div>
+    <div id="icpAdminChronology"><p class="muted">Memuatkan kronologi...</p></div>
+
+    <hr><div class="section-head"><div><h3>4. JADUAL MAKLUMAT PENERBANGAN / KAPAL TERBANG</h3><p class="muted">Maklumat penerbangan dan pesawat yang berkaitan dengan insiden.</p></div><button id="icpAddFlight" type="button">TAMBAH PENERBANGAN</button></div>
+    <div id="icpFlightTable"><p class="muted">Memuatkan maklumat penerbangan...</p></div>`;
+
+  const anchor=$('#icpControlPanel');
+  if(anchor) anchor.insertAdjacentElement('afterend',panel); else document.querySelector('main')?.appendChild(panel);
+  $('#icpAdminRefresh').onclick=loadIcpAdministration;
+  $('#icpAddResponder').onclick=()=>editIcpResponder();
+  $('#icpAddVictim').onclick=()=>editIcpManualVictim();
+  $('#icpSetVictimTotal').onclick=setIcpOfficialVictimTotal;
+  $('#icpAddFlight').onclick=()=>editIcpFlight();
+  await loadIcpAdministration();
+}
+
+const icpTable=(headers,body,min='900px')=>`<div style="overflow-x:auto;width:100%"><table style="width:100%;border-collapse:collapse;min-width:${min}"><thead><tr>${headers.map(h=>`<th style="text-align:left;padding:12px;border-bottom:1px solid #244052">${esc(h)}</th>`).join('')}</tr></thead><tbody>${body||`<tr><td colspan="${headers.length}" style="padding:14px" class="muted">Tiada rekod.</td></tr>`}</tbody></table></div>`;
+const icpTd=v=>`<td style="padding:12px;border-bottom:1px solid #1b3444;vertical-align:top">${v}</td>`;
+
+async function loadIcpAdministration(){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ICP') return;
+  await Promise.all([loadIcpResponders(),loadIcpVictims(),loadIcpAdminChronology(),loadIcpFlights()]);
+}
+
+async function loadIcpResponders(){
+  const box=$('#icpResponderTable'); if(!box)return;
+  const q=await supabase.from('ecor_icp_responder').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const rows=q.data||[]; $('#icpResponderMetric').textContent=rows.reduce((n,x)=>n+(Number(x.pegawai)||0)+(Number(x.anggota)||0),0);
+  const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(esc(x.agensi||'-'))}${icpTd(Number(x.pegawai)||0)}${icpTd(Number(x.anggota)||0)}${icpTd((Number(x.pegawai)||0)+(Number(x.anggota)||0))}${icpTd(esc(x.jentera||'-'))}${icpTd(esc(x.kenderaan||'-'))}${icpTd(esc(fmt(x.masa_tiba)))}${icpTd(esc(x.catatan||'-'))}${icpTd(`<button data-icp-responder-edit="${x.id}" class="ghost">EDIT</button>` )}</tr>`).join('');
+  box.innerHTML=icpTable(['BIL','AGENSI','PEGAWAI','ANGGOTA','JUMLAH KEKUATAN','JENTERA','KENDERAAN','MASA TIBA','CATATAN','TINDAKAN'],body,'1250px');
+  box.querySelectorAll('[data-icp-responder-edit]').forEach(b=>b.onclick=()=>editIcpResponder(rows.find(x=>x.id===b.dataset.icpResponderEdit)));
+}
+
+async function editIcpResponder(row=null){
+  const agensi=prompt('AGENSI:',row?.agensi||''); if(agensi===null||!agensi.trim())return;
+  const pegawai=prompt('KEKUATAN PEGAWAI:',String(row?.pegawai??0)); if(pegawai===null)return;
+  const anggota=prompt('KEKUATAN ANGGOTA:',String(row?.anggota??0)); if(anggota===null)return;
+  const jentera=prompt('JENTERA:',row?.jentera||''); if(jentera===null)return;
+  const kenderaan=prompt('KENDERAAN:',row?.kenderaan||''); if(kenderaan===null)return;
+  const catatan=prompt('CATATAN:',row?.catatan||''); if(catatan===null)return;
+  const payload={operasi_id:assignment.operasi_id,agensi:agensi.trim(),pegawai:Math.max(0,Number(pegawai)||0),anggota:Math.max(0,Number(anggota)||0),jentera:jentera.trim()||null,kenderaan:kenderaan.trim()||null,catatan:catatan.trim()||null,masa_tiba:row?.masa_tiba||new Date().toISOString(),dikemaskini_oleh:session.user.id};
+  const q=row?await supabase.from('ecor_icp_responder').update(payload).eq('id',row.id):await supabase.from('ecor_icp_responder').insert({...payload,dicipta_oleh:session.user.id});
+  if(q.error){alert(q.error.message);return;} await loadIcpResponders();
+}
+
+async function loadIcpVictims(){
+  const box=$('#icpVictimTable'); if(!box)return;
+  const [tq,mq,sq]=await Promise.all([
+    supabase.from('ecor_triage_mangsa').select('id,no_mangsa,nama_mangsa,jantina,tag_triage,status_lokasi,destinasi,catatan,masa_terima_triage').eq('operasi_id',assignment.operasi_id),
+    supabase.from('ecor_icp_mangsa_manual').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true}),
+    supabase.from('ecor_icp_ringkasan').select('*').eq('operasi_id',assignment.operasi_id).maybeSingle()
+  ]);
+  const err=tq.error||mq.error||sq.error; if(err){box.innerHTML=`<p class="status">${esc(err.message)}</p>`;return;}
+  const system=tq.data||[], manual=mq.data||[];
+  const official=Number(sq.data?.jumlah_mangsa_rasmi); const total=Number.isFinite(official)?official:(system.length+manual.length);
+  $('#icpSystemVictimCount').textContent=system.length; $('#icpManualVictimCount').textContent=manual.length; $('#icpOfficialVictimCount').textContent=total; $('#icpVictimMetric').textContent=total;
+  const rows=[...system.map(x=>({...x,sumber:'TRIAGE',tag:x.tag_triage,status:x.destinasi||String(x.status_lokasi||'-').replaceAll('_',' '),masa:x.masa_terima_triage,_manual:false})),...manual.map(x=>({...x,sumber:'ICP (MANUAL)',tag:x.tag_mangsa,status:x.status_destinasi,masa:x.created_at,_manual:true}))];
+  const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(x.no_mangsa||'-')}</strong>`)}${icpTd(esc(x.nama_mangsa||'-'))}${icpTd(esc(x.jantina||'-'))}${icpTd(esc(x.tag||'-'))}${icpTd(esc(x.status||'-'))}${icpTd(esc(x.sumber))}${icpTd(esc(x.catatan||'-'))}${icpTd(x._manual?`<button data-icp-victim-edit="${x.id}" class="ghost">EDIT</button>`:'<span class="muted">AUTO</span>')}</tr>`).join('');
+  box.innerHTML=icpTable(['BIL','ID MANGSA','NAMA','JANTINA','WARNA KAD','STATUS / DESTINASI','SUMBER','CATATAN','TINDAKAN'],body,'1200px');
+  box.querySelectorAll('[data-icp-victim-edit]').forEach(b=>b.onclick=()=>editIcpManualVictim(manual.find(x=>x.id===b.dataset.icpVictimEdit)));
+}
+
+async function editIcpManualVictim(row=null){
+  const no=prompt('ID / NO. MANGSA:',row?.no_mangsa||''); if(no===null||!no.trim())return;
+  const nama=prompt('NAMA MANGSA (jika diketahui):',row?.nama_mangsa||''); if(nama===null)return;
+  const jantina=prompt('JANTINA: LELAKI / WANITA / BELUM DIKENALPASTI',row?.jantina||'BELUM DIKENALPASTI'); if(jantina===null)return;
+  const tag=prompt('WARNA KAD: PUTIH / MERAH / KUNING / HIJAU',row?.tag_mangsa||''); if(tag===null)return;
+  const stat=prompt('STATUS / DESTINASI:',row?.status_destinasi||'DALAM TRIAGE'); if(stat===null)return;
+  const cat=prompt('CATATAN:',row?.catatan||''); if(cat===null)return;
+  const payload={operasi_id:assignment.operasi_id,no_mangsa:no.trim(),nama_mangsa:nama.trim()||null,jantina:jantina.trim().toUpperCase()||'BELUM DIKENALPASTI',tag_mangsa:tag.trim().toUpperCase()||null,status_destinasi:stat.trim()||null,catatan:cat.trim()||null,dikemaskini_oleh:session.user.id};
+  const q=row?await supabase.from('ecor_icp_mangsa_manual').update(payload).eq('id',row.id):await supabase.from('ecor_icp_mangsa_manual').insert({...payload,dicipta_oleh:session.user.id});
+  if(q.error){alert(q.error.message);return;} await loadIcpVictims();
+}
+
+async function setIcpOfficialVictimTotal(){
+  const current=Number($('#icpOfficialVictimCount')?.textContent||0);
+  const raw=prompt('Masukkan JUMLAH MANGSA RASMI ICP:',String(current)); if(raw===null)return;
+  const n=Number(raw); if(!Number.isInteger(n)||n<0){alert('Jumlah mangsa mesti nombor bulat 0 atau lebih.');return;}
+  const sebab=prompt('CATATAN / SEBAB perubahan jumlah rasmi ICP:','Maklumat terkini diterima oleh ICP'); if(sebab===null)return;
+  const old=current;
+  const q=await supabase.from('ecor_icp_ringkasan').upsert({operasi_id:assignment.operasi_id,jumlah_mangsa_rasmi:n,catatan:sebab.trim()||null,dikemaskini_oleh:session.user.id,updated_at:new Date().toISOString()},{onConflict:'operasi_id'});
+  if(q.error){alert(q.error.message);return;}
+  await supabase.from('ecor_icp_audit_mangsa').insert({operasi_id:assignment.operasi_id,nilai_asal:old,nilai_baharu:n,catatan:sebab.trim()||null,diubah_oleh:session.user.id});
+  await loadIcpVictims();
+}
+
+async function loadIcpAdminChronology(){
+  const box=$('#icpAdminChronology'); if(!box)return;
+  const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const rows=(q.data||[]).filter(x=>x.dari_tempat_tugas_id===assignment.tempat_tugas_id||x.kepada_tempat_tugas_id===assignment.tempat_tugas_id); $('#icpChronologyMetric').textContent=rows.length;
+  const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY'):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(cleanChronologyNote(x.kandungan)||'-'))}${icpTd(`<strong>${esc(x.dari?.kod||'-')}</strong>`)}</tr>`}).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'980px');
+}
+
+async function loadIcpFlights(){
+  const box=$('#icpFlightTable'); if(!box)return;
+  const q=await supabase.from('ecor_icp_penerbangan').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const rows=q.data||[]; $('#icpFlightMetric').textContent=rows.length;
+  const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(esc(x.no_penerbangan||'-'))}${icpTd(esc(x.syarikat||'-'))}${icpTd(esc(x.jenis_pesawat||'-'))}${icpTd(esc(x.pendaftaran_pesawat||'-'))}${icpTd(esc(x.asal||'-'))}${icpTd(esc(x.destinasi||'-'))}${icpTd(Number(x.penumpang)||0)}${icpTd(Number(x.kru)||0)}${icpTd((Number(x.penumpang)||0)+(Number(x.kru)||0))}${icpTd(esc(x.catatan||'-'))}${icpTd(`<button data-icp-flight-edit="${x.id}" class="ghost">EDIT</button>`)}</tr>`).join('');
+  box.innerHTML=icpTable(['BIL','NO. PENERBANGAN','SYARIKAT','JENIS PESAWAT','PENDAFTARAN','ASAL','DESTINASI','PENUMPANG','KRU','POB','CATATAN','TINDAKAN'],body,'1450px');
+  box.querySelectorAll('[data-icp-flight-edit]').forEach(b=>b.onclick=()=>editIcpFlight(rows.find(x=>x.id===b.dataset.icpFlightEdit)));
+}
+
+async function editIcpFlight(row=null){
+  const no=prompt('NO. PENERBANGAN:',row?.no_penerbangan||''); if(no===null||!no.trim())return;
+  const sy=prompt('SYARIKAT PENERBANGAN:',row?.syarikat||''); if(sy===null)return;
+  const jenis=prompt('JENIS PESAWAT:',row?.jenis_pesawat||''); if(jenis===null)return;
+  const reg=prompt('PENDAFTARAN PESAWAT:',row?.pendaftaran_pesawat||''); if(reg===null)return;
+  const asal=prompt('ASAL:',row?.asal||''); if(asal===null)return;
+  const dest=prompt('DESTINASI:',row?.destinasi||''); if(dest===null)return;
+  const pax=prompt('JUMLAH PENUMPANG:',String(row?.penumpang??0)); if(pax===null)return;
+  const kru=prompt('JUMLAH KRU:',String(row?.kru??0)); if(kru===null)return;
+  const cat=prompt('CATATAN:',row?.catatan||''); if(cat===null)return;
+  const payload={operasi_id:assignment.operasi_id,no_penerbangan:no.trim(),syarikat:sy.trim()||null,jenis_pesawat:jenis.trim()||null,pendaftaran_pesawat:reg.trim()||null,asal:asal.trim()||null,destinasi:dest.trim()||null,penumpang:Math.max(0,Number(pax)||0),kru:Math.max(0,Number(kru)||0),catatan:cat.trim()||null,dikemaskini_oleh:session.user.id};
+  const q=row?await supabase.from('ecor_icp_penerbangan').update(payload).eq('id',row.id):await supabase.from('ecor_icp_penerbangan').insert({...payload,dicipta_oleh:session.user.id});
+  if(q.error){alert(q.error.message);return;} await loadIcpFlights();
 }
 
 // FIX 041: boot dashboard secara selamat selepas keseluruhan modul selesai diinisialisasi.
