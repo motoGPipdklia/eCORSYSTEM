@@ -253,10 +253,10 @@ function setupIcpTopMenu(){
     dropdown.addEventListener('click',async e=>{
       const b=e.target.closest('[data-icp-menu]'); if(!b)return;
       const action=b.dataset.icpMenu; closeMenu();
-      if(action==='chronology') await openIcpTableModal('KRONOLOGI');
-      if(action==='victims') await openIcpTableModal('MANGSA');
-      if(action==='responder') await openIcpTableModal('RESPONDER');
-      if(action==='flight') await openIcpTableModal('PENERBANGAN');
+      if(action==='chronology') await showIcpChartContent('KRONOLOGI');
+      if(action==='victims') await showIcpChartContent('MANGSA');
+      if(action==='responder') await showIcpChartContent('RESPONDER');
+      if(action==='flight') await showIcpChartContent('PENERBANGAN');
       if(action==='inbox-report') await openCorInbox('LAPORAN');
       if(action==='inbox-instruction') await openCorInbox('ARAHAN');
       if(action==='movement'){
@@ -268,6 +268,80 @@ function setupIcpTopMenu(){
     document.addEventListener('click',e=>{if(!wrap.contains(e.target))closeMenu();});
     document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();});
   }
+}
+
+
+// ===== FIX 080: ICP — PILIHAN CARTA DIPAPAR TERUS DI RUANG CARTA OPERASI =====
+function getIcpChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section.panel')||heading?.closest('section')||null;
+}
+
+async function showIcpChartContent(kind){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ICP') return;
+  const panel=getIcpChartPanel();
+  if(!panel) return;
+
+  // Ruang CARTA hanya memaparkan satu pilihan pada satu masa.
+  panel.querySelectorAll(':scope > p.muted').forEach(p=>p.style.display='none');
+  $('#chronologyPanel')?.style.setProperty('display','none','important');
+  $('#corOverallVictimPanel')?.style.setProperty('display','none','important');
+
+  let host=$('#icpChartContent');
+  if(!host){
+    host=document.createElement('div');
+    host.id='icpChartContent';
+    panel.appendChild(host);
+  }
+  host.hidden=false;
+  host.style.display='block';
+  host.innerHTML=`
+    <div class="section-head" style="margin-top:14px">
+      <div>
+        <p class="eyebrow">INCIDENT COMMAND POST</p>
+        <h3 id="icpChartTitle">CARTA ICP</h3>
+        <p id="icpChartDesc" class="muted"></p>
+      </div>
+      <div class="adu-actions" id="icpChartActions"></div>
+    </div>
+    <div id="icpChartSummary"></div>
+    <div id="icpChartBody"><p class="muted">Memuatkan...</p></div>`;
+
+  const title=$('#icpChartTitle'),desc=$('#icpChartDesc'),actions=$('#icpChartActions'),summary=$('#icpChartSummary');
+  let body=$('#icpChartBody');
+  const refresh=`<button id="icpChartRefresh" type="button" class="ghost">MUAT SEMULA</button>`;
+
+  if(kind==='KRONOLOGI'){
+    title.textContent='KRONOLOGI';
+    desc.textContent='Kronologi laporan, arahan dan maklumat ICP.';
+    actions.innerHTML=refresh;
+    body.id='icpAdminChronology';
+  }else if(kind==='MANGSA'){
+    title.textContent='MANGSA';
+    desc.textContent='Data TRIAGE dan data manual ICP. Jumlah rasmi boleh dikemas kini oleh ICP.';
+    actions.innerHTML=`<button id="icpSetVictimTotal" type="button" class="ghost">KEMAS KINI JUMLAH</button><button id="icpAddVictim" type="button">TAMBAH MANGSA</button>${refresh}`;
+    summary.innerHTML='<div class="cor-metrics"><div><small>DIREKOD SISTEM</small><strong id="icpSystemVictimCount">0</strong></div><div><small>MANUAL ICP</small><strong id="icpManualVictimCount">0</strong></div><div><small>JUMLAH RASMI ICP</small><strong id="icpOfficialVictimCount">0</strong></div></div>';
+    body.id='icpVictimTable';
+  }else if(kind==='RESPONDER'){
+    title.textContent='RESPONDER';
+    desc.textContent='Agensi, kekuatan pegawai dan anggota, jentera serta kenderaan.';
+    actions.innerHTML=`<button id="icpAddResponder" type="button">TAMBAH RESPONDER</button>${refresh}`;
+    body.id='icpResponderTable';
+  }else if(kind==='PENERBANGAN'){
+    title.textContent='MAKLUMAT PENERBANGAN';
+    desc.textContent='Maklumat penerbangan dan pesawat berkaitan insiden.';
+    actions.innerHTML=`<button id="icpAddFlight" type="button">TAMBAH PENERBANGAN</button>${refresh}`;
+    body.id='icpFlightTable';
+  }
+
+  $('#icpAddResponder')?.addEventListener('click',()=>editIcpResponder());
+  $('#icpAddVictim')?.addEventListener('click',()=>editIcpManualVictim());
+  $('#icpSetVictimTotal')?.addEventListener('click',setIcpOfficialVictimTotal);
+  $('#icpAddFlight')?.addEventListener('click',()=>editIcpFlight());
+  $('#icpChartRefresh')?.addEventListener('click',()=>loadIcpTable(kind));
+
+  await loadIcpTable(kind);
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 // ===== FIX 070: COR — PETI MASUK > LAPORAN / ARAHAN =====
