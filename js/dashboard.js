@@ -3198,8 +3198,29 @@ async function showFfhaMenuView(kind){
   $('#ffhaChartRefresh').onclick=loadFfhaChronology;
   await loadFfhaChronology();chart.scrollIntoView({behavior:'smooth',block:'start'});
 }
+function hideFfhaLegacyCommunicationPanels(){
+  if(dutyCode()!=='FFHA')return;
+  const hide=(el)=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  hide($('#instructionList')?.closest('section.panel'));
+  hide($('#chronologyPanel'));
+  hide($('#historyList')?.closest('section.panel'));
+}
+function setupFfhaLegacyPanelGuard(){
+  if(dutyCode()!=='FFHA')return;
+  hideFfhaLegacyCommunicationPanels();
+  if(document.body.dataset.ffhaLegacyGuard==='1')return;
+  document.body.dataset.ffhaLegacyGuard='1';
+  const observer=new MutationObserver(()=>hideFfhaLegacyCommunicationPanels());
+  observer.observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
+}
 function setupFfhaTopMenu(){
   const header=document.querySelector('header.top');if(!header||dutyCode()!=='FFHA')return;
+  setupFfhaLegacyPanelGuard();
+  // FIX 108: FFHA - kad Arahan Diterima pada paparan utama disembunyikan.
+  // Arahan masih boleh dicapai melalui menu PETI MASUK > ARAHAN.
+  const instructionCount=$('#instructionCount');
+  const instructionCard=instructionCount?.closest('article.card');
+  if(instructionCard){instructionCard.hidden=true;instructionCard.style.setProperty('display','none','important');}
   let wrap=$('#ffhaTopMenu');
   if(!wrap){
     wrap=document.createElement('div');wrap.id='ffhaTopMenu';wrap.className='cor-top-menu';
