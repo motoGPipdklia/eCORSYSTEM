@@ -1690,11 +1690,12 @@ function hideBhaLegacyPanels(){
   hide(chronologyHeading?.closest('section.panel'));
   hide($('#historyList')?.closest('section.panel'));
   hide($('#bhaPanel'));
-  hide($('#victimMovementPanel'));
+  const movement=$('#victimMovementPanel');
+  if(movement && movement.dataset.bhaMenuOpen!=='1') hide(movement);
 }
 function closeBhaMenuViews(){
   const host=$('#bhaChartContent');if(host){host.hidden=true;host.style.setProperty('display','none','important');}
-  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){delete movement.dataset.bhaMenuOpen;movement.hidden=true;movement.style.setProperty('display','none','important');}
   const chart=getBhaChartPanel();chart?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');
 }
 async function loadBhaChronology(){
@@ -1751,7 +1752,7 @@ function setupBhaTopMenu(){
       if(a==='chronology')await showBhaChronology();
       if(a==='movement'){
         closeBhaMenuViews();const chart=getBhaChartPanel(),p=$('#victimMovementPanel');
-        if(chart&&p){chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');p.hidden=false;p.style.removeProperty('display');chart.appendChild(p);await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}
+        if(chart&&p){chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');p.dataset.bhaMenuOpen='1';p.hidden=false;p.style.removeProperty('display');chart.appendChild(p);await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}
       }
       if(a==='communication-log'){closeBhaMenuViews();await openCorCommunicationLog();}
     });
