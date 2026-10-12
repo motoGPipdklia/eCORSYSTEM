@@ -3062,12 +3062,12 @@ const isSrcSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().
 async function renderSrcModule(){
  $('#srcPanel')?.remove(); if(!isSrcSupervisor())return; ensureAduStyles();
  const p=document.createElement('section'); p.id='srcPanel'; p.className='panel';
- p.innerHTML=`<div class="section-head"><div><p class="eyebrow">SURVIVOR RECEPTION CENTRE</p><h2>SRC — Pengurusan Mangsa</h2><p class="muted">Mangsa yang dihantar dari TRIAGE / ADU mesti disahkan tiba oleh SRC sebelum dimasukkan ke Senarai Mangsa Aktif SRC.</p></div><button id="srcRefresh" class="ghost">MUAT SEMULA</button></div>
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">SURVIVOR RECEPTION CENTRE</p><h2>SRC — Pengurusan Mangsa</h2><p class="muted">Mangsa yang dihantar dari TRIAGE / ADU mesti disahkan tiba oleh SRC sebelum dimasukkan ke Senarai Mangsa Aktif SRC.</p></div><div class="adu-actions"><button id="srcRefresh" class="ghost">MUAT SEMULA</button><button id="srcClose" class="ghost">TUTUP</button></div></div>
  <div class="adu-metrics"><div class="adu-metric"><small>DALAM PERJALANAN</small><strong id="srcPerjalanan">0</strong></div><div class="adu-metric"><small>HIJAU</small><strong id="srcHijau">0</strong></div><div class="adu-metric"><small>KUNING</small><strong id="srcKuning">0</strong></div><div class="adu-metric"><small>DOKUMENTASI SELESAI</small><strong id="srcDokSelesai">0</strong></div><div class="adu-metric"><small>JUMLAH DALAM SRC</small><strong id="srcJumlah">0</strong></div></div>
  <div class="adu-transfer"><div class="section-head"><div><h3>Mangsa Dalam Perjalanan ke SRC</h3><p class="muted">Mangsa belum dikira berada di SRC sehingga butang SAHKAN TIBA DI SRC ditekan.</p></div></div><div id="srcIncomingList"><p class="muted">Tiada mangsa dalam perjalanan.</p></div></div>
  <p id="srcStatus" class="status"></p><h3>Senarai Mangsa Aktif SRC</h3><div id="srcList"><p class="muted">Memuatkan mangsa SRC...</p></div>
  <div class="adu-transfer"><h3>Rekod Keluar SRC</h3><div id="srcTransferList"><p class="muted">Tiada rekod keluar SRC.</p></div></div>`;
- document.querySelector('main').appendChild(p); $('#srcRefresh').onclick=loadSrcData; await loadSrcData();
+ document.querySelector('main').appendChild(p); $('#srcRefresh').onclick=loadSrcData; $('#srcClose').onclick=closeSrcMenuViews; await loadSrcData();
 }
 
 async function syncSrcIncoming(){ return; }
