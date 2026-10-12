@@ -816,6 +816,7 @@ async function loadAssignment() {
   await renderFfrhModule();
   await renderFfhaModule();
   await renderPmaModule();
+  await renderVipMediaModule();
   await renderVictimMovementPanel();
   await renderCorAduStatus();
   setupCorTopMenu();
@@ -828,6 +829,7 @@ async function loadAssignment() {
   setupFfhaTopMenu();
   setupPmaTopMenu();
   setupBhaTopMenu();
+  setupVipMediaTopMenu();
   applyPmaCleanLayout();
 }
 
@@ -3331,6 +3333,46 @@ function setupFfhaTopMenu(){
   const waris=$('#ffhaPanel');if(waris&&!waris.dataset.menuManaged){waris.dataset.menuManaged='1';waris.hidden=true;waris.style.setProperty('display','none','important');}
 }
 
+
+// ===== FIX 115: VIP & MEDIA — PENDAFTARAN + MENU 3 TITIK =====
+const vipMediaConfig=()=>{
+  const code=dutyCode();
+  if(code==='VIP')return {code:'VIP',table:'ecor_vip',title:'Pendaftaran VIP',item:'VIP'};
+  if(code==='MEDIA')return {code:'MEDIA',table:'ecor_media',title:'Pendaftaran Media',item:'MEDIA'};
+  return null;
+};
+async function renderVipMediaModule(){
+  $('#vipMediaPanel')?.remove();const c=vipMediaConfig();if(!c)return;ensureAduStyles();
+  const p=document.createElement('section');p.id='vipMediaPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">${c.code}</p><h2>${c.title}</h2><p class="muted">Daftar dan urus maklumat ${c.item} bagi operasi semasa.</p></div><button id="vipMediaRefresh" class="ghost">MUAT SEMULA</button></div>
+  <form id="vipMediaForm"><div class="adu-grid">
+  <label>Nama<input id="vipMediaName" required placeholder="Nama penuh"></label>
+  <label>No. KP / Pasport<input id="vipMediaId" placeholder="No. pengenalan"></label>
+  <label>Organisasi / Agensi<input id="vipMediaOrg" placeholder="Organisasi / agensi"></label>
+  <label>Jawatan / Peranan<input id="vipMediaRole" placeholder="Jawatan / peranan"></label>
+  <label>No. Telefon<input id="vipMediaPhone" placeholder="No. telefon"></label>
+  <label>Status<select id="vipMediaStatus"><option value="HADIR">HADIR</option><option value="BEREDAR">BEREDAR</option></select></label>
+  <label class="full">Catatan<textarea id="vipMediaNote"></textarea></label></div><button type="submit">DAFTAR ${c.item}</button></form><p id="vipMediaStatusMsg" class="status"></p><h3>Senarai ${c.item}</h3><div id="vipMediaList"></div>`;
+  document.querySelector('main').appendChild(p);$('#vipMediaRefresh').onclick=loadVipMediaData;$('#vipMediaForm').onsubmit=registerVipMedia;await loadVipMediaData();
+}
+async function registerVipMedia(e){
+  e.preventDefault();const c=vipMediaConfig();if(!c)return;const payload={operasi_id:assignment.operasi_id,nama:$('#vipMediaName').value.trim(),no_pengenalan:$('#vipMediaId').value.trim()||null,organisasi:$('#vipMediaOrg').value.trim()||null,jawatan:$('#vipMediaRole').value.trim()||null,no_telefon:$('#vipMediaPhone').value.trim()||null,status:$('#vipMediaStatus').value,catatan:$('#vipMediaNote').value.trim()||null,masa_daftar:new Date().toISOString(),didaftarkan_oleh:session.user.id};
+  const q=await supabase.from(c.table).insert(payload);if(q.error){$('#vipMediaStatusMsg').textContent=q.error.message;return}e.target.reset();$('#vipMediaStatusMsg').textContent=`Pendaftaran ${c.item} berjaya disimpan.`;await loadVipMediaData();
+}
+async function loadVipMediaData(){
+  const c=vipMediaConfig(),box=$('#vipMediaList');if(!c||!box)return;const q=await supabase.from(c.table).select('*').eq('operasi_id',assignment.operasi_id).order('masa_daftar',{ascending:false});if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const rows=q.data||[];
+  box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1100px"><thead><tr><th>BIL</th><th>NAMA</th><th>NO. KP / PASPORT</th><th>ORGANISASI / AGENSI</th><th>JAWATAN / PERANAN</th><th>NO. TELEFON</th><th>MASA DAFTAR</th><th>STATUS</th><th>CATATAN</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.nama||'-')}</b></td><td>${esc(r.no_pengenalan||'-')}</td><td>${esc(r.organisasi||'-')}</td><td>${esc(r.jawatan||'-')}</td><td>${esc(r.no_telefon||'-')}</td><td>${esc(fmt(r.masa_daftar))}</td><td>${esc(r.status||'-')}</td><td>${esc(r.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:`<p class="muted">Tiada ${c.item} didaftarkan.</p>`;
+}
+function getVipMediaChartPanel(){return getCorChartPanel();}
+function closeVipMediaViews(){const h=$('#vipMediaChartContent');if(h){h.hidden=true;h.style.setProperty('display','none','important')}const p=$('#vipMediaPanel');if(p){p.hidden=true;p.style.setProperty('display','none','important')}getVipMediaChartPanel()?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');}
+async function loadVipMediaChronology(){const box=$('#vipMediaChartBody');if(!box)return;const q=await supabase.from('ecor_komunikasi').select(`id,tajuk,kandungan,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const id=assignment.tempat_tugas_id,rows=(q.data||[]).filter(x=>x.dari_tempat_tugas_id===id||x.kepada_tempat_tugas_id===id);const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(cleanChronologyNote(x.kandungan)||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');}
+async function showVipMediaView(kind){const c=vipMediaConfig(),chart=getVipMediaChartPanel();if(!c||!chart)return;closeVipMediaViews();chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');if(kind==='REGISTER'){const p=$('#vipMediaPanel');if(p){p.hidden=false;p.style.removeProperty('display');chart.appendChild(p);await loadVipMediaData();p.scrollIntoView({behavior:'smooth',block:'start'})}return}let h=$('#vipMediaChartContent');if(!h){h=document.createElement('div');h.id='vipMediaChartContent';h.style.marginTop='18px';chart.appendChild(h)}h.hidden=false;h.style.removeProperty('display');h.innerHTML=`<div class="section-head"><div><p class="eyebrow">${c.code}</p><h2>Kronologi ${c.code}</h2></div><div class="adu-actions"><button id="vipMediaChronRefresh" class="ghost">MUAT SEMULA</button><button id="vipMediaChronClose" class="ghost">TUTUP</button></div></div><div id="vipMediaChartBody"><p class="muted">Memuatkan...</p></div>`;$('#vipMediaChronClose').onclick=closeVipMediaViews;$('#vipMediaChronRefresh').onclick=loadVipMediaChronology;await loadVipMediaChronology();chart.scrollIntoView({behavior:'smooth',block:'start'});}
+function setupVipMediaTopMenu(){
+  const c=vipMediaConfig(),header=document.querySelector('header.top');if(!c||!header)return;
+  const hide=el=>{if(el){el.hidden=true;el.style.setProperty('display','none','important')}};hide($('#instructionCount')?.closest('article.card'));hide($('#instructionList')?.closest('section.panel'));const ch=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='KRONOLOGI');hide(ch?.closest('section.panel'));hide($('#historyList')?.closest('section.panel'));
+  let wrap=$('#vipMediaTopMenu');if(!wrap){wrap=document.createElement('div');wrap.id='vipMediaTopMenu';wrap.className='cor-top-menu';wrap.innerHTML=`<button id="vipMediaTopMenuToggle" type="button" class="cor-menu-dots" aria-expanded="false">⋮</button><div id="vipMediaTopMenuDropdown" class="cor-menu-dropdown" hidden><div class="cor-menu-parent" id="vipMediaInboxMenu"><button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button><div class="cor-menu-submenu" id="vipMediaInboxSubmenu" hidden><button type="button" data-vm-menu="inbox-report">LAPORAN</button><button type="button" data-vm-menu="inbox-instruction">ARAHAN</button></div></div><button type="button" data-vm-menu="chronology">KRONOLOGI</button><button type="button" data-vm-menu="register">PENDAFTARAN ${c.item}</button><button type="button" data-vm-menu="communication-log">LOG KOMUNIKASI</button></div>`;header.insertBefore(wrap,header.firstChild)}
+  const t=$('#vipMediaTopMenuToggle'),d=$('#vipMediaTopMenuDropdown'),im=$('#vipMediaInboxMenu'),ib=im?.querySelector('.cor-menu-inbox'),sub=$('#vipMediaInboxSubmenu');const closeSub=()=>{if(sub)sub.hidden=true;ib?.setAttribute('aria-expanded','false')},openSub=()=>{if(sub)sub.hidden=false;ib?.setAttribute('aria-expanded','true')},close=()=>{d.hidden=true;t.setAttribute('aria-expanded','false');closeSub()};if(t.dataset.bound!=='1'){t.dataset.bound='1';t.onclick=e=>{e.stopPropagation();d.hidden?(d.hidden=false,t.setAttribute('aria-expanded','true')):close()};im?.addEventListener('mouseenter',openSub);im?.addEventListener('mouseleave',closeSub);ib?.addEventListener('click',e=>{e.stopPropagation();sub?.hidden?openSub():closeSub()});d.addEventListener('click',async e=>{const b=e.target.closest('[data-vm-menu]');if(!b)return;const a=b.dataset.vmMenu;close();if(a==='inbox-report')await openCorInbox('LAPORAN');if(a==='inbox-instruction')await openCorInbox('ARAHAN');if(a==='chronology')await showVipMediaView('KRONOLOGI');if(a==='register')await showVipMediaView('REGISTER');if(a==='communication-log'){closeVipMediaViews();await openCorCommunicationLog()}});document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()})}
+  const p=$('#vipMediaPanel');if(p){p.hidden=true;p.style.setProperty('display','none','important')}
+}
 
 // ===== FIX 109: PMA — MENU 3 TITIK =====
 function getPmaChartPanel(){
