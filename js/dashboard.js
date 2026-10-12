@@ -241,7 +241,6 @@ function setupIcpTopMenu(){
             <button type="button" data-icp-menu="inbox-instruction">ARAHAN</button>
           </div>
         </div>
-        <button type="button" data-icp-menu="movement">PERGERAKAN MANGSA</button>
         <button type="button" data-icp-menu="communication-log">LOG KOMUNIKASI</button>
       </div>`;
     header.insertBefore(wrap,header.firstChild);
@@ -276,10 +275,6 @@ function setupIcpTopMenu(){
       if(action==='flight') await showIcpChartContent('PENERBANGAN');
       if(action==='inbox-report') await openCorInbox('LAPORAN');
       if(action==='inbox-instruction') await openCorInbox('ARAHAN');
-      if(action==='movement'){
-        const panel=$('#victimMovementPanel');
-        if(panel){panel.hidden=false;panel.style.display='';panel.scrollIntoView({behavior:'smooth',block:'start'});await loadVictimMovements();}
-      }
       if(action==='communication-log') await openCorCommunicationLog();
     });
     document.addEventListener('click',e=>{if(!wrap.contains(e.target))closeMenu();});
