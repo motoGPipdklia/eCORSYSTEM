@@ -181,6 +181,95 @@ function setupCorTopMenu(){
 }
 
 
+
+
+// ===== FIX 079: MENU BERTINGKAT ICP =====
+function setupIcpTopMenu(){
+  const header=document.querySelector('header.top');
+  const isIcp=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='ICP';
+  if(!header || !isIcp) return;
+
+  // Paparan panjang ICP FIX 078 disorok; semua fungsi dicapai melalui menu ⋮.
+  const adminPanel=$('#icpAdministrationPanel');
+  if(adminPanel){adminPanel.hidden=true;adminPanel.style.setProperty('display','none','important');}
+  const inboxPanel=$('#icpControlPanel');
+  if(inboxPanel){inboxPanel.hidden=true;inboxPanel.style.setProperty('display','none','important');}
+
+  // Sejarah komunikasi asal tidak dipaparkan inline untuk ICP.
+  const historyList=$('#historyList');
+  const historyPanel=historyList?.closest('section.panel');
+  if(historyPanel){historyPanel.hidden=true;historyPanel.style.setProperty('display','none','important');}
+
+  let wrap=$('#icpTopMenu');
+  if(!wrap){
+    wrap=document.createElement('div');
+    wrap.id='icpTopMenu';
+    wrap.className='cor-top-menu';
+    wrap.innerHTML=`
+      <button id="icpTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu ICP" aria-expanded="false">⋮</button>
+      <div id="icpTopMenuDropdown" class="cor-menu-dropdown" hidden>
+        <div class="cor-menu-parent" id="icpChartMenu">
+          <button type="button" class="cor-menu-chart" aria-haspopup="true" aria-expanded="false">CARTA <span>▶</span></button>
+          <div class="cor-menu-submenu" id="icpChartSubmenu" hidden>
+            <button type="button" data-icp-menu="chronology">KRONOLOGI</button>
+            <button type="button" data-icp-menu="victims">MANGSA</button>
+            <button type="button" data-icp-menu="responder">RESPONDER</button>
+            <button type="button" data-icp-menu="flight">MAKLUMAT PENERBANGAN</button>
+          </div>
+        </div>
+        <div class="cor-menu-parent" id="icpInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="icpInboxSubmenu" hidden>
+            <button type="button" data-icp-menu="inbox-report">LAPORAN</button>
+            <button type="button" data-icp-menu="inbox-instruction">ARAHAN</button>
+          </div>
+        </div>
+        <button type="button" data-icp-menu="movement">PERGERAKAN MANGSA</button>
+        <button type="button" data-icp-menu="communication-log">LOG KOMUNIKASI</button>
+      </div>`;
+    header.insertBefore(wrap,header.firstChild);
+  }
+
+  const toggle=$('#icpTopMenuToggle'),dropdown=$('#icpTopMenuDropdown');
+  const chartMenu=$('#icpChartMenu'),chartButton=chartMenu?.querySelector('.cor-menu-chart'),chartSub=$('#icpChartSubmenu');
+  const inboxMenu=$('#icpInboxMenu'),inboxButton=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#icpInboxSubmenu');
+  if(!toggle||!dropdown)return;
+  const closeChart=()=>{if(chartSub)chartSub.hidden=true;chartButton?.setAttribute('aria-expanded','false');};
+  const openChart=()=>{if(chartSub)chartSub.hidden=false;chartButton?.setAttribute('aria-expanded','true');};
+  const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxButton?.setAttribute('aria-expanded','false');};
+  const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxButton?.setAttribute('aria-expanded','true');};
+  const closeMenu=()=>{dropdown.hidden=true;toggle.setAttribute('aria-expanded','false');closeChart();closeInbox();};
+  const openMenu=()=>{dropdown.hidden=false;toggle.setAttribute('aria-expanded','true');};
+
+  if(toggle.dataset.bound!=='1'){
+    toggle.dataset.bound='1';
+    toggle.addEventListener('click',e=>{e.stopPropagation();dropdown.hidden?openMenu():closeMenu();});
+    chartMenu?.addEventListener('mouseenter',openChart);
+    chartMenu?.addEventListener('mouseleave',closeChart);
+    chartButton?.addEventListener('click',e=>{e.stopPropagation();closeInbox();chartSub?.hidden?openChart():closeChart();});
+    inboxMenu?.addEventListener('mouseenter',()=>{closeChart();openInbox();});
+    inboxMenu?.addEventListener('mouseleave',closeInbox);
+    inboxButton?.addEventListener('click',e=>{e.stopPropagation();closeChart();inboxSub?.hidden?openInbox():closeInbox();});
+    dropdown.addEventListener('click',async e=>{
+      const b=e.target.closest('[data-icp-menu]'); if(!b)return;
+      const action=b.dataset.icpMenu; closeMenu();
+      if(action==='chronology') await openIcpTableModal('KRONOLOGI');
+      if(action==='victims') await openIcpTableModal('MANGSA');
+      if(action==='responder') await openIcpTableModal('RESPONDER');
+      if(action==='flight') await openIcpTableModal('PENERBANGAN');
+      if(action==='inbox-report') await openCorInbox('LAPORAN');
+      if(action==='inbox-instruction') await openCorInbox('ARAHAN');
+      if(action==='movement'){
+        const panel=$('#victimMovementPanel');
+        if(panel){panel.hidden=false;panel.style.display='';panel.scrollIntoView({behavior:'smooth',block:'start'});await loadVictimMovements();}
+      }
+      if(action==='communication-log') await openCorCommunicationLog();
+    });
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))closeMenu();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();});
+  }
+}
+
 // ===== FIX 070: COR — PETI MASUK > LAPORAN / ARAHAN =====
 async function openCorInbox(type){
   if(!assignment) return;
@@ -245,7 +334,7 @@ async function loadCorInboxModal(type){
       <article class="message">
         <div class="message-head">
           <span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span>
-          <b>${esc(x.dari?.kod||'-')} → COR</b>
+          <b>${esc(x.dari?.kod||'-')} → ${esc(assignment?.ecor_tempat_tugas?.kod||'COR')}</b>
           <small>${esc(fmt(x.created_at))}</small>
         </div>
         <h3>${esc(x.tajuk)}</h3>
@@ -256,7 +345,7 @@ async function loadCorInboxModal(type){
           <button data-modal-reply="${x.id}">BALAS</button>
           ${parentPlace ? `<button data-modal-forward="${x.id}" ${x.status === 'DIMAJUKAN' ? 'disabled' : ''}>${x.status === 'DIMAJUKAN' ? 'TELAH DIMAJUKAN' : 'MAJU KE SALURAN ATASAN'}</button>` : ''}
         </div>
-      </article>`).join('') : '<p class="muted">Tiada laporan dalam Peti Masuk COR.</p>';
+      </article>`).join('') : `<p class="muted">Tiada laporan dalam Peti Masuk ${esc(assignment?.ecor_tempat_tugas?.kod||'COR')}.</p>`;
     box.querySelectorAll('[data-modal-action]').forEach(b=>b.onclick=async()=>{await setMessageStatus(b.dataset.modalAction,'DALAM_TINDAKAN');await loadCorInboxModal('LAPORAN');});
     box.querySelectorAll('[data-modal-reply]').forEach(b=>b.onclick=()=>replyInstruction(rows.find(x=>x.id===b.dataset.modalReply)));
     box.querySelectorAll('[data-modal-forward]').forEach(b=>b.onclick=async()=>{await forwardReportToParent(rows.find(x=>x.id===b.dataset.modalForward),b);await loadCorInboxModal('LAPORAN');});
@@ -279,7 +368,7 @@ async function loadCorInboxModal(type){
         <button data-instruction-action="${x.id}" class="ghost">DALAM TINDAKAN</button>
         <button data-instruction-reply="${x.id}">BALAS</button>
       </div>
-    </article>`).join('') : '<p class="muted">Tiada arahan dalam Peti Masuk COR.</p>';
+    </article>`).join('') : `<p class="muted">Tiada arahan dalam Peti Masuk ${esc(assignment?.ecor_tempat_tugas?.kod||'COR')}.</p>`;
   box.querySelectorAll('[data-instruction-action]').forEach(b=>b.onclick=async()=>{
     await setMessageStatus(b.dataset.instructionAction,'DALAM_TINDAKAN');
     await loadCorInboxModal('ARAHAN');
@@ -483,6 +572,7 @@ async function loadAssignment() {
   await renderVictimMovementPanel();
   await renderCorAduStatus();
   setupCorTopMenu();
+  setupIcpTopMenu();
 }
 
 
@@ -1133,7 +1223,7 @@ async function loadCorInbox() {
     <article class="message">
       <div class="message-head">
         <span class="badge ${esc(x.keutamaan)}">${esc(x.keutamaan)}</span>
-        <b>${esc(x.dari?.kod||'-')} → COR</b>
+        <b>${esc(x.dari?.kod||'-')} → ${esc(assignment?.ecor_tempat_tugas?.kod||'COR')}</b>
         <small>${esc(fmt(x.created_at))}</small>
       </div>
       <h3>${esc(x.tajuk)}</h3>
