@@ -2835,6 +2835,7 @@ function setupTriageTopMenu(){
         <button type="button" data-triage-menu="chronology">KRONOLOGI</button>
         <button type="button" data-triage-menu="victims">PENGURUSAN MANGSA</button>
         <button type="button" data-triage-menu="movement">NOTIFIKASI PERGERAKAN MANGSA</button>
+        <button type="button" data-triage-menu="communication-log">LOG KOMUNIKASI</button>
       </div>`;
     header.insertBefore(wrap,header.firstChild);
   }
@@ -2856,6 +2857,11 @@ function setupTriageTopMenu(){
       if(a==='movement'){
         closeTriageChartViews();
         const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}
+      }
+      if(a==='communication-log'){
+        closeTriageChartViews();
+        const p=$('#victimMovementPanel');if(p){p.hidden=true;p.style.setProperty('display','none','important');}
+        await openCorCommunicationLog();
       }
     });
     document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
