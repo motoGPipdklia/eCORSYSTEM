@@ -195,6 +195,23 @@ function setupIcpTopMenu(){
   const inboxPanel=$('#icpControlPanel');
   if(inboxPanel){inboxPanel.hidden=true;inboxPanel.style.setProperty('display','none','important');}
 
+  // FIX 082: ICP — sembunyikan panel Arahan Diterima asal.
+  // Arahan hanya dicapai melalui MENU > PETI MASUK > ARAHAN.
+  const oldInstructionList=$('#instructionList');
+  const oldInstructionPanel=oldInstructionList?.closest('section.panel');
+  if(oldInstructionPanel){
+    oldInstructionPanel.hidden=true;
+    oldInstructionPanel.style.setProperty('display','none','important');
+  }
+
+  // FIX 082: ICP — sembunyikan panel Kronologi asal daripada dashboard.
+  // Kronologi hanya dipaparkan di ruang CARTA apabila MENU > CARTA > KRONOLOGI dipilih.
+  const chronologyPanel=$('#chronologyPanel');
+  if(chronologyPanel){
+    chronologyPanel.hidden=true;
+    chronologyPanel.style.setProperty('display','none','important');
+  }
+
   // Sejarah komunikasi asal tidak dipaparkan inline untuk ICP.
   const historyList=$('#historyList');
   const historyPanel=historyList?.closest('section.panel');
