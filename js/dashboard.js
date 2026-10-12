@@ -78,6 +78,7 @@ function setupCorTopMenu(){
             <button type="button" data-cor-menu="victims">MANGSA</button>
             <button type="button" data-cor-menu="responder">RESPONDER</button>
             <button type="button" data-cor-menu="flight">MAKLUMAT PENERBANGAN</button>
+            <button type="button" data-cor-menu="incident-summary">RINGKASAN KEJADIAN</button>
           </div>
         </div>
         <div class="cor-menu-parent" id="corInboxMenu">
@@ -165,6 +166,7 @@ function setupCorTopMenu(){
       if(action==='victims') $('#corVictimToggle')?.click();
       if(action==='responder') showCorIcpData('RESPONDER');
       if(action==='flight') showCorIcpData('PENERBANGAN');
+      if(action==='incident-summary') showCorIcpData('RINGKASAN');
       if(action==='movement'){
         const panel=$('#victimMovementPanel');
         if(panel){
@@ -186,73 +188,68 @@ function setupCorTopMenu(){
 
 
 
-// ===== FIX 084: COR — RESPONDER & MAKLUMAT PENERBANGAN DARIPADA ICP =====
+// ===== FIX 086: COR — RESPONDER, MAKLUMAT PENERBANGAN & RINGKASAN KEJADIAN =====
 function getCorChartPanel(){
   const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
   return heading?.closest('section')||null;
 }
-
 function closeOtherCorChartViews(){
-  const chronology=$('#chronologyPanel');
-  if(chronology){chronology.hidden=true;chronology.style.setProperty('display','none','important');}
-  const victims=$('#corAduPanel');
-  if(victims){victims.hidden=true;victims.style.setProperty('display','none','important');}
-  $('#corChronologyToggle')?.setAttribute('aria-expanded','false');
-  $('#corVictimToggle')?.setAttribute('aria-expanded','false');
+  const chronology=$('#chronologyPanel'); if(chronology){chronology.hidden=true;chronology.style.setProperty('display','none','important');}
+  const victims=$('#corAduPanel'); if(victims){victims.hidden=true;victims.style.setProperty('display','none','important');}
+  $('#corChronologyToggle')?.setAttribute('aria-expanded','false'); $('#corVictimToggle')?.setAttribute('aria-expanded','false');
 }
-
 async function showCorIcpData(kind){
   if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='COR') return;
-  const chartPanel=getCorChartPanel();
-  if(!chartPanel) return;
-  closeOtherCorChartViews();
-  const placeholder=chartPanel.querySelector(':scope > p.muted');
-  if(placeholder) placeholder.style.display='none';
-
-  let panel=$('#corIcpDataPanel');
-  if(!panel){
-    panel=document.createElement('div');
-    panel.id='corIcpDataPanel';
-    panel.style.marginTop='18px';
-    chartPanel.appendChild(panel);
-  }
-  panel.hidden=false;
-  panel.style.removeProperty('display');
-  const isResponder=kind==='RESPONDER';
-  panel.innerHTML=`
-    <div class="section-head">
-      <div><p class="eyebrow">DATA ICP</p><h2>${isResponder?'Responder':'Maklumat Penerbangan'}</h2>
-      <p class="muted">Paparan baca sahaja. Data ini diambil terus daripada rekod ICP.</p></div>
-      <div class="adu-actions"><button id="corIcpDataRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corIcpDataClose" type="button" class="ghost">TUTUP</button></div>
-    </div>
-    <div id="corIcpDataBody"><p class="muted">Memuatkan data ICP...</p></div>
-    <p id="corIcpDataStatus" class="status"></p>`;
+  const chartPanel=getCorChartPanel(); if(!chartPanel)return; closeOtherCorChartViews();
+  const placeholder=chartPanel.querySelector(':scope > p.muted'); if(placeholder)placeholder.style.display='none';
+  let panel=$('#corIcpDataPanel'); if(!panel){panel=document.createElement('div');panel.id='corIcpDataPanel';panel.style.marginTop='18px';chartPanel.appendChild(panel);}
+  panel.hidden=false;panel.style.removeProperty('display');
+  const isResponder=kind==='RESPONDER', isFlight=kind==='PENERBANGAN';
+  const title=isResponder?'Responder':isFlight?'Maklumat Penerbangan':'Ringkasan Kejadian';
+  const desc=isResponder?'Data responder yang direkodkan oleh ICP.':isFlight?'Maklumat penerbangan diurus dan dikemas kini oleh COR.':'Ringkasan kejadian diisi dan dikemas kini oleh COR.';
+  const add=isFlight?'<button id="corAddFlight" type="button">TAMBAH PENERBANGAN</button>':kind==='RINGKASAN'?'<button id="corAddIncident" type="button">TAMBAH RINGKASAN</button>':'';
+  panel.innerHTML=`<div class="section-head"><div><p class="eyebrow">CONTROL ROOM</p><h2>${title}</h2><p class="muted">${desc}</p></div><div class="adu-actions">${add}<button id="corIcpDataRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corIcpDataClose" type="button" class="ghost">TUTUP</button></div></div><div id="corIcpDataBody"><p class="muted">Memuatkan data...</p></div><p id="corIcpDataStatus" class="status"></p>`;
   $('#corIcpDataClose').onclick=()=>{panel.hidden=true;panel.style.setProperty('display','none','important');if(placeholder)placeholder.style.display='';};
   $('#corIcpDataRefresh').onclick=()=>loadCorIcpData(kind);
-  await loadCorIcpData(kind);
-  chartPanel.scrollIntoView({behavior:'smooth',block:'start'});
+  $('#corAddFlight')?.addEventListener('click',()=>editCorFlight()); $('#corAddIncident')?.addEventListener('click',()=>editCorIncident());
+  await loadCorIcpData(kind); chartPanel.scrollIntoView({behavior:'smooth',block:'start'});
 }
-
 async function loadCorIcpData(kind){
-  const box=$('#corIcpDataBody'), status=$('#corIcpDataStatus');
-  if(!box) return;
-  box.innerHTML='<p class="muted">Memuatkan data ICP...</p>';
-  if(status) status.textContent='';
+  const box=$('#corIcpDataBody'),status=$('#corIcpDataStatus');if(!box)return;box.innerHTML='<p class="muted">Memuatkan data...</p>';if(status)status.textContent='';
   if(kind==='RESPONDER'){
     const q=await supabase.from('ecor_icp_responder').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
-    if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;}
-    const rows=q.data||[];
+    if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;} const rows=q.data||[];
     const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(x.agensi||'-')}</strong>`)}${icpTd(Number(x.pegawai)||0)}${icpTd(Number(x.anggota)||0)}${icpTd((Number(x.pegawai)||0)+(Number(x.anggota)||0))}${icpTd(esc(x.jentera||'-'))}${icpTd(esc(x.kenderaan||'-'))}${icpTd(esc(x.masa_tiba?new Date(x.masa_tiba).toLocaleString('ms-MY'):'-'))}${icpTd(esc(x.catatan||'-'))}</tr>`).join('');
-    box.innerHTML=icpTable(['BIL','AGENSI','PEGAWAI','ANGGOTA','JUMLAH KEKUATAN','JENTERA','KENDERAAN','MASA TIBA','CATATAN'],body,'1200px');
-    return;
+    box.innerHTML=icpTable(['BIL','AGENSI','PEGAWAI','ANGGOTA','JUMLAH KEKUATAN','JENTERA','KENDERAAN','MASA TIBA','CATATAN'],body,'1200px');return;
   }
-  const q=await supabase.from('ecor_icp_penerbangan').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
-  if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;}
-  const rows=q.data||[];
-  const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(x.no_penerbangan||'-')}</strong>`)}${icpTd(esc(x.syarikat||'-'))}${icpTd(esc(x.jenis_pesawat||'-'))}${icpTd(esc(x.pendaftaran_pesawat||'-'))}${icpTd(esc(x.asal||'-'))}${icpTd(esc(x.destinasi||'-'))}${icpTd(esc(x.masa_berlepas||'-'))}${icpTd(esc(x.masa_ketibaan||'-'))}${icpTd(Number(x.penumpang)||0)}${icpTd(Number(x.kru)||0)}${icpTd((Number(x.penumpang)||0)+(Number(x.kru)||0))}${icpTd(esc(x.catatan||'-'))}</tr>`).join('');
-  box.innerHTML=icpTable(['BIL','NO. PENERBANGAN','SYARIKAT','JENIS PESAWAT','PENDAFTARAN','ASAL','DESTINASI','MASA PERLEPASAN','MASA KETIBAAN','PENUMPANG','KRU','JUMLAH POB','CATATAN'],body,'1700px');
+  if(kind==='PENERBANGAN'){
+    const q=await supabase.from('ecor_icp_penerbangan').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+    if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;}const rows=q.data||[];
+    const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(x.no_penerbangan||'-')}</strong>`)}${icpTd(esc(x.syarikat||'-'))}${icpTd(esc(x.jenis_pesawat||'-'))}${icpTd(esc(x.pendaftaran_pesawat||'-'))}${icpTd(esc(x.asal||'-'))}${icpTd(esc(x.destinasi||'-'))}${icpTd(esc(x.masa_berlepas||'-'))}${icpTd(esc(x.masa_ketibaan||'-'))}${icpTd(Number(x.penumpang)||0)}${icpTd(Number(x.kru)||0)}${icpTd((Number(x.penumpang)||0)+(Number(x.kru)||0))}${icpTd(esc(x.catatan||'-'))}${icpTd(`<button data-cor-flight-edit="${x.id}" class="ghost">EDIT</button>`)}</tr>`).join('');
+    box.innerHTML=icpTable(['BIL','NO. PENERBANGAN','SYARIKAT','JENIS PESAWAT','PENDAFTARAN','ASAL','DESTINASI','MASA PERLEPASAN','MASA KETIBAAN','PENUMPANG','KRU','JUMLAH POB','CATATAN','TINDAKAN'],body,'1800px');
+    box.querySelectorAll('[data-cor-flight-edit]').forEach(b=>b.onclick=()=>editCorFlight(rows.find(x=>x.id===b.dataset.corFlightEdit)));return;
+  }
+  const q=await supabase.from('ecor_cor_ringkasan_kejadian').select('*').eq('operasi_id',assignment.operasi_id).order('tarikh',{ascending:true}).order('masa',{ascending:true});
+  if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;}const rows=q.data||[];
+  const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(esc(x.tarikh||'-'))}${icpTd(esc(x.masa||'-'))}${icpTd(`<strong>${esc(x.perkara||'-')}</strong>`)}${icpTd(esc(x.ringkasan||'-'))}${icpTd(`<button data-cor-incident-edit="${x.id}" class="ghost">EDIT</button> <button data-cor-incident-delete="${x.id}" class="ghost">PADAM</button>`)}</tr>`).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','RINGKASAN KEJADIAN','TINDAKAN'],body,'1100px');
+  box.querySelectorAll('[data-cor-incident-edit]').forEach(b=>b.onclick=()=>editCorIncident(rows.find(x=>x.id===b.dataset.corIncidentEdit)));
+  box.querySelectorAll('[data-cor-incident-delete]').forEach(b=>b.onclick=()=>deleteCorIncident(b.dataset.corIncidentDelete));
 }
-
+async function editCorFlight(row=null){
+  openIcpForm(row?'EDIT MAKLUMAT PENERBANGAN':'TAMBAH PENERBANGAN',[{name:'no',label:'NO. PENERBANGAN',value:row?.no_penerbangan,required:true},{name:'sy',label:'SYARIKAT PENERBANGAN',value:row?.syarikat},{name:'jenis',label:'JENIS PESAWAT',value:row?.jenis_pesawat},{name:'reg',label:'PENDAFTARAN PESAWAT',value:row?.pendaftaran_pesawat},{name:'asal',label:'ASAL',value:row?.asal},{name:'dest',label:'DESTINASI',value:row?.destinasi},{name:'berlepas',label:'MASA PERLEPASAN',type:'time',value:row?.masa_berlepas?.slice?.(0,5)||row?.masa_berlepas||''},{name:'tiba',label:'MASA KETIBAAN',type:'time',value:row?.masa_ketibaan?.slice?.(0,5)||row?.masa_ketibaan||''},{name:'pax',label:'JUMLAH PENUMPANG',type:'number',min:0,value:row?.penumpang??0},{name:'kru',label:'JUMLAH KRU',type:'number',min:0,value:row?.kru??0},{name:'cat',label:'CATATAN',type:'textarea',value:row?.catatan}],async(v,m,s)=>{
+    const payload={operasi_id:assignment.operasi_id,no_penerbangan:v.no.trim(),syarikat:v.sy.trim()||null,jenis_pesawat:v.jenis.trim()||null,pendaftaran_pesawat:v.reg.trim()||null,asal:v.asal.trim()||null,destinasi:v.dest.trim()||null,masa_berlepas:v.berlepas||null,masa_ketibaan:v.tiba||null,penumpang:Math.max(0,Number(v.pax)||0),kru:Math.max(0,Number(v.kru)||0),catatan:v.cat.trim()||null,dikemaskini_oleh:session.user.id};
+    const q=row?await supabase.from('ecor_icp_penerbangan').update(payload).eq('id',row.id):await supabase.from('ecor_icp_penerbangan').insert({...payload,dicipta_oleh:session.user.id});if(q.error){s.textContent=q.error.message;return;}m.style.display='none';await loadCorIcpData('PENERBANGAN');
+  });
+}
+async function editCorIncident(row=null){
+  const today=new Date().toLocaleDateString('en-CA'); const now=new Date().toTimeString().slice(0,5);
+  openIcpForm(row?'EDIT RINGKASAN KEJADIAN':'TAMBAH RINGKASAN KEJADIAN',[{name:'tarikh',label:'TARIKH',type:'date',value:row?.tarikh||today,required:true},{name:'masa',label:'MASA',type:'time',value:row?.masa?.slice?.(0,5)||row?.masa||now,required:true},{name:'perkara',label:'PERKARA / TAJUK',value:row?.perkara,required:true},{name:'ringkasan',label:'RINGKASAN KEJADIAN',type:'textarea',value:row?.ringkasan,required:true}],async(v,m,s)=>{
+    const payload={operasi_id:assignment.operasi_id,tarikh:v.tarikh,masa:v.masa,perkara:v.perkara.trim(),ringkasan:v.ringkasan.trim(),dikemaskini_oleh:session.user.id};
+    const q=row?await supabase.from('ecor_cor_ringkasan_kejadian').update(payload).eq('id',row.id):await supabase.from('ecor_cor_ringkasan_kejadian').insert({...payload,dicipta_oleh:session.user.id});if(q.error){s.textContent=q.error.message;return;}m.style.display='none';await loadCorIcpData('RINGKASAN');
+  });
+}
+async function deleteCorIncident(id){if(!confirm('Padam rekod Ringkasan Kejadian ini?'))return;const q=await supabase.from('ecor_cor_ringkasan_kejadian').delete().eq('id',id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return;}await loadCorIcpData('RINGKASAN');}
 
 
 // ===== FIX 079: MENU BERTINGKAT ICP =====
@@ -303,7 +300,6 @@ function setupIcpTopMenu(){
             <button type="button" data-icp-menu="chronology">KRONOLOGI</button>
             <button type="button" data-icp-menu="victims">MANGSA</button>
             <button type="button" data-icp-menu="responder">RESPONDER</button>
-            <button type="button" data-icp-menu="flight">MAKLUMAT PENERBANGAN</button>
           </div>
         </div>
         <div class="cor-menu-parent" id="icpInboxMenu">
@@ -344,7 +340,6 @@ function setupIcpTopMenu(){
       if(action==='chronology') await showIcpChartContent('KRONOLOGI');
       if(action==='victims') await showIcpChartContent('MANGSA');
       if(action==='responder') await showIcpChartContent('RESPONDER');
-      if(action==='flight') await showIcpChartContent('PENERBANGAN');
       if(action==='inbox-report') await openCorInbox('LAPORAN');
       if(action==='inbox-instruction') await openCorInbox('ARAHAN');
       if(action==='communication-log') await openCorCommunicationLog();
