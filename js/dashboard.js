@@ -802,6 +802,7 @@ async function loadAssignment() {
   setupCorTopMenu();
   setupIcpTopMenu();
   setupTecTopMenu();
+  setupTriageTopMenu();
 }
 
 
@@ -2162,11 +2163,11 @@ async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
 }
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
- const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(['COR','TEC','ACCC'].includes(code))p.hidden=true;
- const movementActions=['COR','TEC','ACCC'].includes(code)?`<div class="adu-actions"><button id="movementRefresh" class="ghost">MUAT SEMULA</button><button id="movementClose" class="ghost">TUTUP</button></div>`:`<button id="movementRefresh" class="ghost">MUAT SEMULA</button>`;
+ const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(['COR','TEC','ACCC','TRIAGE'].includes(code))p.hidden=true;
+ const movementActions=['COR','TEC','ACCC','TRIAGE'].includes(code)?`<div class="adu-actions"><button id="movementRefresh" class="ghost">MUAT SEMULA</button><button id="movementClose" class="ghost">TUTUP</button></div>`:`<button id="movementRefresh" class="ghost">MUAT SEMULA</button>`;
  const movementDesc=code==='TEC'?'Paparan TEC hanya melibatkan pergerakan mangsa yang masuk ke atau keluar dari SRC dan PMA.':(['COR','ACCC'].includes(code)?'Paparan semua pergerakan mangsa bagi operasi semasa.':'Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja.'); p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">${movementDesc}</p></div>${movementActions}</div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
  const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements;
- if(['COR','TEC','ACCC'].includes(code)&&$('#movementClose'))$('#movementClose').onclick=()=>{p.hidden=true;};
+ if(['COR','TEC','ACCC','TRIAGE'].includes(code)&&$('#movementClose'))$('#movementClose').onclick=()=>{p.hidden=true;};
  await loadVictimMovements();
 }
 async function loadVictimMovements(){
@@ -2785,6 +2786,84 @@ async function loadIcpOverallVictimStatus(){
   if(status) status.textContent=`Status mangsa keseluruhan terkini. Jumlah mangsa: ${rows.length}.`;
 }
 
+// ===== FIX 093: TRIAGE — MENU 3 TITIK / CARTA =====
+function getTriageChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section')||null;
+}
+function closeTriageChartViews(){
+  const host=$('#triageChartContent');if(host){host.hidden=true;host.style.setProperty('display','none','important');}
+  const victim=$('#triagePanel');if(victim){victim.hidden=true;victim.style.setProperty('display','none','important');}
+  const chart=getTriageChartPanel();chart?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');
+}
+async function showTriageChart(kind){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='TRIAGE')return;
+  const chart=getTriageChartPanel();if(!chart)return;
+  closeTriageChartViews();const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');
+  if(kind==='MANGSA'){
+    const victim=$('#triagePanel');if(victim){victim.hidden=false;victim.style.removeProperty('display');await loadTriageData();chart.appendChild(victim);victim.scrollIntoView({behavior:'smooth',block:'start'});}return;
+  }
+  let host=$('#triageChartContent');if(!host){host=document.createElement('div');host.id='triageChartContent';host.style.marginTop='18px';chart.appendChild(host);}
+  host.hidden=false;host.style.removeProperty('display');
+  host.innerHTML=`<div class="section-head"><div><p class="eyebrow">TRIAGE</p><h2>Kronologi TRIAGE</h2><p class="muted">Komunikasi yang melibatkan TRIAGE bagi operasi semasa.</p></div><div class="adu-actions"><button id="triageChartRefresh" class="ghost">MUAT SEMULA</button><button id="triageChartClose" class="ghost">TUTUP</button></div></div><div id="triageChartBody"><p class="muted">Memuatkan...</p></div>`;
+  $('#triageChartClose').onclick=closeTriageChartViews;$('#triageChartRefresh').onclick=loadTriageChronology;
+  await loadTriageChronology();chart.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadTriageChronology(){
+  const box=$('#triageChartBody');if(!box)return;
+  const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,status,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const triageId=assignment.tempat_tugas_id;
+  const rows=(q.data||[]).filter(x=>x.dari_tempat_tugas_id===triageId||x.kepada_tempat_tugas_id===triageId);
+  const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
+}
+function setupTriageTopMenu(){
+  const header=document.querySelector('header.top');const isTriage=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='TRIAGE';if(!header||!isTriage)return;
+  let wrap=$('#triageTopMenu');
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='triageTopMenu';wrap.className='cor-top-menu';
+    wrap.innerHTML=`<button id="triageTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu TRIAGE" aria-expanded="false">⋮</button>
+      <div id="triageTopMenuDropdown" class="cor-menu-dropdown" hidden>
+        <div class="cor-menu-parent" id="triageInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="triageInboxSubmenu" hidden>
+            <button type="button" data-triage-menu="inbox-report">LAPORAN</button>
+            <button type="button" data-triage-menu="inbox-instruction">ARAHAN</button>
+          </div>
+        </div>
+        <button type="button" data-triage-menu="chronology">KRONOLOGI</button>
+        <button type="button" data-triage-menu="victims">PENGURUSAN MANGSA</button>
+        <button type="button" data-triage-menu="movement">NOTIFIKASI PERGERAKAN MANGSA</button>
+      </div>`;
+    header.insertBefore(wrap,header.firstChild);
+  }
+  const toggle=$('#triageTopMenuToggle'),drop=$('#triageTopMenuDropdown'),inboxMenu=$('#triageInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#triageInboxSubmenu');if(!toggle||!drop)return;
+  const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxBtn?.setAttribute('aria-expanded','false')};
+  const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxBtn?.setAttribute('aria-expanded','true')};
+  const close=()=>{drop.hidden=true;toggle.setAttribute('aria-expanded','false');closeInbox()};
+  if(toggle.dataset.bound!=='1'){
+    toggle.dataset.bound='1';
+    toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};
+    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);
+    inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
+    drop.addEventListener('click',async e=>{
+      const b=e.target.closest('[data-triage-menu]');if(!b)return;const a=b.dataset.triageMenu;close();
+      if(a==='inbox-report')await openCorInbox('LAPORAN');
+      if(a==='inbox-instruction')await openCorInbox('ARAHAN');
+      if(a==='chronology')await showTriageChart('KRONOLOGI');
+      if(a==='victims')await showTriageChart('MANGSA');
+      if(a==='movement'){
+        closeTriageChartViews();
+        const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}
+      }
+    });
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  }
+  const victim=$('#triagePanel');if(victim&&!victim.dataset.menuManaged){victim.dataset.menuManaged='1';victim.hidden=true;victim.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+}
+
 // ===== TRIAGE FIX 023 =====
 const isTriageSupervisor=()=>String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='TRIAGE' &&
  String(assignment?.peranan||profile?.peranan||'').trim().toUpperCase()==='PENYELIA';
@@ -2803,6 +2882,7 @@ async function renderTriageModule(){
  <div class="adu-transfer"><h3>Rekod Keluar TRIAGE</h3><div id="triageTransferList"><p class="muted">Tiada rekod pemindahan.</p></div></div>`;
  document.querySelector('main').appendChild(p);
  $('#triageRefresh').onclick=loadTriageData; $('#triageVictimForm').onsubmit=registerTriageVictim; await loadTriageData();
+ p.hidden=true;p.style.setProperty('display','none','important');setupTriageTopMenu();
 }
 async function loadTriageData(){
  if(!isTriageSupervisor())return;
