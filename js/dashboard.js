@@ -804,6 +804,7 @@ async function loadAssignment() {
   setupTecTopMenu();
   setupTriageTopMenu();
   setupSrcTopMenu();
+  setupAduTopMenu();
 }
 
 
@@ -3052,6 +3053,81 @@ function setupSrcTopMenu(){
     document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
   }
   const victim=$('#srcPanel');if(victim&&!victim.dataset.menuManaged){victim.dataset.menuManaged='1';victim.hidden=true;victim.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+}
+
+// ===== FIX 102: ADU — MENU 3 TITIK SEPERTI SRC =====
+function getAduChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section')||null;
+}
+function closeAduMenuViews(){
+  const host=$('#aduChartContent');if(host){host.hidden=true;host.style.setProperty('display','none','important');}
+  const victim=$('#aduPanel');if(victim){victim.hidden=true;victim.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+  const chart=getAduChartPanel();chart?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');
+}
+async function showAduMenuView(kind){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ADU')return;
+  const chart=getAduChartPanel();if(!chart)return;
+  closeAduMenuViews();chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');
+  if(kind==='MANGSA'){
+    const victim=$('#aduPanel');if(victim){victim.hidden=false;victim.style.removeProperty('display');await loadAduData();chart.appendChild(victim);victim.scrollIntoView({behavior:'smooth',block:'start'});}return;
+  }
+  let host=$('#aduChartContent');if(!host){host=document.createElement('div');host.id='aduChartContent';host.style.marginTop='18px';chart.appendChild(host);}
+  host.hidden=false;host.style.removeProperty('display');
+  host.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>Kronologi ADU</h2><p class="muted">Komunikasi yang melibatkan ADU bagi operasi semasa.</p></div><div class="adu-actions"><button id="aduChartRefresh" class="ghost">MUAT SEMULA</button><button id="aduChartClose" class="ghost">TUTUP</button></div></div><div id="aduChartBody"><p class="muted">Memuatkan...</p></div>`;
+  $('#aduChartClose').onclick=closeAduMenuViews;$('#aduChartRefresh').onclick=loadAduChronology;
+  await loadAduChronology();chart.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadAduChronology(){
+  const box=$('#aduChartBody');if(!box)return;
+  const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,status,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const aduId=assignment.tempat_tugas_id;
+  const rows=(q.data||[]).filter(x=>x.dari_tempat_tugas_id===aduId||x.kepada_tempat_tugas_id===aduId);
+  const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
+}
+function setupAduTopMenu(){
+  const header=document.querySelector('header.top');const isAdu=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='ADU';if(!header||!isAdu)return;
+  let wrap=$('#aduTopMenu');
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='aduTopMenu';wrap.className='cor-top-menu';
+    wrap.innerHTML=`<button id="aduTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu ADU" aria-expanded="false">⋮</button>
+      <div id="aduTopMenuDropdown" class="cor-menu-dropdown" hidden>
+        <div class="cor-menu-parent" id="aduInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="aduInboxSubmenu" hidden>
+            <button type="button" data-adu-menu="inbox-report">LAPORAN</button>
+            <button type="button" data-adu-menu="inbox-instruction">ARAHAN</button>
+          </div>
+        </div>
+        <button type="button" data-adu-menu="chronology">KRONOLOGI</button>
+        <button type="button" data-adu-menu="victims">PENGURUSAN MANGSA</button>
+        <button type="button" data-adu-menu="movement">NOTIFIKASI PERGERAKAN MANGSA</button>
+        <button type="button" data-adu-menu="communication-log">LOG KOMUNIKASI</button>
+      </div>`;
+    header.insertBefore(wrap,header.firstChild);
+  }
+  const toggle=$('#aduTopMenuToggle'),drop=$('#aduTopMenuDropdown'),inboxMenu=$('#aduInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#aduInboxSubmenu');if(!toggle||!drop)return;
+  const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxBtn?.setAttribute('aria-expanded','false')};
+  const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxBtn?.setAttribute('aria-expanded','true')};
+  const close=()=>{drop.hidden=true;toggle.setAttribute('aria-expanded','false');closeInbox()};
+  if(toggle.dataset.bound!=='1'){
+    toggle.dataset.bound='1';toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};
+    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
+    drop.addEventListener('click',async e=>{const b=e.target.closest('[data-adu-menu]');if(!b)return;const a=b.dataset.aduMenu;close();
+      if(a==='inbox-report')await openCorInbox('LAPORAN');
+      if(a==='inbox-instruction')await openCorInbox('ARAHAN');
+      if(a==='chronology')await showAduMenuView('KRONOLOGI');
+      if(a==='victims')await showAduMenuView('MANGSA');
+      if(a==='movement'){closeAduMenuViews();const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}}
+      if(a==='communication-log'){closeAduMenuViews();await openCorCommunicationLog();}
+    });
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  }
+  const victim=$('#aduPanel');if(victim&&!victim.dataset.menuManaged){victim.dataset.menuManaged='1';victim.hidden=true;victim.style.setProperty('display','none','important');}
   const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
 }
 
