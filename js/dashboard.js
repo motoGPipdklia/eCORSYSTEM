@@ -1609,47 +1609,11 @@ async function renderBhaModule() {
   $('#bhaPanel')?.remove();
   if (!isBha()) return;
 
-  // BHA mesti berada terus di bawah ICP. Ini mengunci penghantaran laporan BHA → ICP.
+  // BHA mesti berada terus di bawah ICP. Komunikasi BHA kekal dikunci kepada ICP.
   if (!parentPlace || String(parentPlace.kod || '').trim().toUpperCase() !== 'ICP') {
     $('#status').textContent = 'BHA belum dipautkan kepada ICP. Jalankan SQL FIX 046 di Supabase.';
     $('#openReport').disabled = true;
   }
-
-  const panel = document.createElement('section');
-  panel.id = 'bhaPanel';
-  panel.className = 'panel';
-  panel.innerHTML = `
-    <div class="section-head">
-      <div>
-        <p class="eyebrow">BODY HOLDING AREA</p>
-        <h2>BHA — Komunikasi Dengan ICP</h2>
-        <p class="muted">Saluran komunikasi khas BHA. Laporan hanya dihantar kepada ICP dan arahan hanya diterima daripada ICP.</p>
-      </div>
-      <button id="bhaRefresh" class="ghost">MUAT SEMULA</button>
-    </div>
-    <div class="cor-metrics">
-      <div><small>ARAHAN ICP</small><strong id="bhaTotal">0</strong></div>
-      <div><small>DALAM TINDAKAN</small><strong id="bhaAction">0</strong></div>
-    </div>
-    <h3>Arahan Diterima Daripada ICP</h3>
-    <div id="bhaInbox" class="message-list"><p class="muted">Memuatkan arahan ICP...</p></div>
-    <hr>
-    <h3>Laporan BHA kepada ICP</h3>
-    <p class="muted">Gunakan HANTAR LAPORAN untuk menghantar maklumat BHA terus kepada ICP.</p>
-    <button id="bhaOpenReport">HANTAR LAPORAN KE ICP</button>`;
-  document.querySelector('main').appendChild(panel);
-  $('#bhaRefresh').onclick = loadBhaInbox;
-  $('#bhaOpenReport').onclick = () => {
-    if (!parentPlace || String(parentPlace.kod || '').trim().toUpperCase() !== 'ICP') {
-      alert('Saluran BHA → ICP tidak tersedia. Jalankan SQL FIX 046.');
-      return;
-    }
-    setReportModeForCurrentRoute();
-    $('#reportPanel').classList.remove('hidden');
-    document.body.classList.add('report-modal-open');
-    $('#reportTitle')?.focus();
-  };
-  await loadBhaInbox();
 }
 
 async function loadBhaInbox() {
@@ -1712,11 +1676,53 @@ async function replyBhaToIcp(source) {
 
 
 
-// ===== FIX 112: BHA — MENU 3 TITIK / KOMUNIKASI KHAS ICP =====
+// ===== FIX 113: BHA — KEMAS PAPARAN / MENU SAHAJA =====
+function getBhaChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section')||null;
+}
+function hideBhaLegacyPanels(){
+  if(!isBha())return;
+  const hide=el=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  hide($('#instructionCount')?.closest('article.card'));
+  hide($('#instructionList')?.closest('section.panel'));
+  const chronologyHeading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='KRONOLOGI');
+  hide(chronologyHeading?.closest('section.panel'));
+  hide($('#historyList')?.closest('section.panel'));
+  hide($('#bhaPanel'));
+  hide($('#victimMovementPanel'));
+}
+function closeBhaMenuViews(){
+  const host=$('#bhaChartContent');if(host){host.hidden=true;host.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+  const chart=getBhaChartPanel();chart?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');
+}
+async function loadBhaChronology(){
+  const box=$('#bhaChartBody');if(!box)return;
+  const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,status,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const bhaId=assignment.tempat_tugas_id;
+  const rows=(q.data||[]).filter(x=>{
+    const from=String(x.dari?.kod||'').trim().toUpperCase(),to=String(x.kepada?.kod||'').trim().toUpperCase();
+    return (x.dari_tempat_tugas_id===bhaId&&to==='ICP')||(x.kepada_tempat_tugas_id===bhaId&&from==='ICP');
+  });
+  const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(cleanChronologyNote(x.kandungan)||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
+}
+async function showBhaChronology(){
+  const chart=getBhaChartPanel();if(!chart)return;
+  closeBhaMenuViews();chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');
+  let host=$('#bhaChartContent');if(!host){host=document.createElement('div');host.id='bhaChartContent';host.style.marginTop='18px';chart.appendChild(host);}
+  host.hidden=false;host.style.removeProperty('display');
+  host.innerHTML=`<div class="section-head"><div><p class="eyebrow">BODY HOLDING AREA</p><h2>Kronologi BHA</h2><p class="muted">Komunikasi BHA dengan ICP sahaja bagi operasi semasa.</p></div><div class="adu-actions"><button id="bhaChartRefresh" class="ghost">MUAT SEMULA</button><button id="bhaChartClose" class="ghost">TUTUP</button></div></div><div id="bhaChartBody"><p class="muted">Memuatkan...</p></div>`;
+  $('#bhaChartClose').onclick=closeBhaMenuViews;$('#bhaChartRefresh').onclick=loadBhaChronology;
+  await loadBhaChronology();chart.scrollIntoView({behavior:'smooth',block:'start'});
+}
 function setupBhaTopMenu(){
   const header=document.querySelector('header.top');
   const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
   if(!header||code!=='BHA')return;
+  hideBhaLegacyPanels();
   let wrap=$('#bhaTopMenu');
   if(!wrap){
     wrap=document.createElement('div');wrap.id='bhaTopMenu';wrap.className='cor-top-menu';
@@ -1724,10 +1730,7 @@ function setupBhaTopMenu(){
       <div id="bhaTopMenuDropdown" class="cor-menu-dropdown" hidden>
         <div class="cor-menu-parent" id="bhaInboxMenu">
           <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
-          <div class="cor-menu-submenu" id="bhaInboxSubmenu" hidden>
-            <button type="button" data-bha-menu="inbox-report">LAPORAN</button>
-            <button type="button" data-bha-menu="inbox-instruction">ARAHAN</button>
-          </div>
+          <div class="cor-menu-submenu" id="bhaInboxSubmenu" hidden><button type="button" data-bha-menu="inbox-report">LAPORAN</button><button type="button" data-bha-menu="inbox-instruction">ARAHAN</button></div>
         </div>
         <button type="button" data-bha-menu="chronology">KRONOLOGI</button>
         <button type="button" data-bha-menu="movement">NOTIFIKASI PERGERAKAN MANGSA</button>
@@ -1735,32 +1738,27 @@ function setupBhaTopMenu(){
       </div>`;
     header.insertBefore(wrap,header.firstChild);
   }
-  const toggle=$('#bhaTopMenuToggle'),drop=$('#bhaTopMenuDropdown'),inboxMenu=$('#bhaInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#bhaInboxSubmenu');
-  if(!toggle||!drop)return;
+  const toggle=$('#bhaTopMenuToggle'),drop=$('#bhaTopMenuDropdown'),inboxMenu=$('#bhaInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#bhaInboxSubmenu');if(!toggle||!drop)return;
   const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxBtn?.setAttribute('aria-expanded','false')};
   const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxBtn?.setAttribute('aria-expanded','true')};
   const close=()=>{drop.hidden=true;toggle.setAttribute('aria-expanded','false');closeInbox()};
   if(toggle.dataset.bound!=='1'){
-    toggle.dataset.bound='1';
-    toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};
-    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);
-    inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
-    drop.addEventListener('click',async e=>{
-      const b=e.target.closest('[data-bha-menu]');if(!b)return;const a=b.dataset.bhaMenu;close();
-      if(a==='inbox-report')await openCorInbox('LAPORAN');
-      if(a==='inbox-instruction')await openCorInbox('ARAHAN');
-      if(a==='chronology'){
-        await loadCommunication();
-        const p=$('#chronologyPanel');if(p){p.hidden=false;p.style.removeProperty('display');p.scrollIntoView({behavior:'smooth',block:'start'});}
-      }
+    toggle.dataset.bound='1';toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};
+    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
+    drop.addEventListener('click',async e=>{const b=e.target.closest('[data-bha-menu]');if(!b)return;const a=b.dataset.bhaMenu;close();
+      if(a==='inbox-report'){closeBhaMenuViews();await openCorInbox('LAPORAN');}
+      if(a==='inbox-instruction'){closeBhaMenuViews();await openCorInbox('ARAHAN');}
+      if(a==='chronology')await showBhaChronology();
       if(a==='movement'){
-        const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}
+        closeBhaMenuViews();const chart=getBhaChartPanel(),p=$('#victimMovementPanel');
+        if(chart&&p){chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');p.hidden=false;p.style.removeProperty('display');chart.appendChild(p);await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}
       }
-      if(a==='communication-log')await openCorCommunicationLog();
+      if(a==='communication-log'){closeBhaMenuViews();await openCorCommunicationLog();}
     });
-    document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});
-    document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
   }
+  // Guard supaya komponen lama tidak muncul semula selepas refresh data.
+  if(!document.body.dataset.bhaCleanGuard){document.body.dataset.bhaCleanGuard='1';new MutationObserver(()=>hideBhaLegacyPanels()).observe(document.querySelector('main'),{childList:true,subtree:true});}
 }
 
 // ===== FIX 089: MENU ACCC SAMA SEPERTI COR (CARTA BACA SAHAJA) =====
