@@ -80,6 +80,8 @@ function setupCorTopMenu(){
             <button type="button" data-cor-menu="flight">MAKLUMAT PENERBANGAN</button>
             <button type="button" data-cor-menu="incident-summary">RINGKASAN KEJADIAN</button>
             <button type="button" data-cor-menu="waris">WARIS</button>
+            <button type="button" data-cor-menu="vip">VIP</button>
+            <button type="button" data-cor-menu="media">MEDIA</button>
           </div>
         </div>
         <div class="cor-menu-parent" id="corInboxMenu">
@@ -169,6 +171,8 @@ function setupCorTopMenu(){
       if(action==='flight') showCorIcpData('PENERBANGAN');
       if(action==='incident-summary') showCorIcpData('RINGKASAN');
       if(action==='waris') showCorIcpData('WARIS');
+      if(action==='vip') showCorIcpData('VIP');
+      if(action==='media') showCorIcpData('MEDIA');
       if(action==='movement'){
         const panel=$('#victimMovementPanel');
         if(panel){
@@ -211,9 +215,9 @@ async function showCorIcpData(kind){
   let panel=$('#corIcpDataPanel'); if(!panel){panel=document.createElement('div');panel.id='corIcpDataPanel';panel.style.marginTop='18px';chartPanel.appendChild(panel);}
   panel.hidden=false;panel.style.removeProperty('display');
   const isResponder=kind==='RESPONDER', isFlight=kind==='PENERBANGAN';
-  const isWaris=kind==='WARIS';
-  const title=isResponder?'Responder':isFlight?'Maklumat Penerbangan':isWaris?'Waris':'Ringkasan Kejadian';
-  const desc=isResponder?'Data responder yang direkodkan oleh ICP.':isFlight?'Maklumat penerbangan diurus dan dikemas kini oleh COR.':isWaris?'Data waris daripada aliran FFHA bagi operasi semasa.':'Ringkasan kejadian diisi dan dikemas kini oleh COR.';
+  const isWaris=kind==='WARIS', isVip=kind==='VIP', isMedia=kind==='MEDIA';
+  const title=isResponder?'Responder':isFlight?'Maklumat Penerbangan':isWaris?'Waris':isVip?'VIP':isMedia?'Media':'Ringkasan Kejadian';
+  const desc=isResponder?'Data responder yang direkodkan oleh ICP.':isFlight?'Maklumat penerbangan diurus dan dikemas kini oleh COR.':isWaris?'Data waris daripada aliran FFHA bagi operasi semasa.':isVip?'Data VIP yang didaftarkan oleh modul VIP bagi operasi semasa.':isMedia?'Data MEDIA yang didaftarkan oleh modul MEDIA bagi operasi semasa.':'Ringkasan kejadian diisi dan dikemas kini oleh COR.';
   const add=readOnly?'':isFlight?'<button id="corAddFlight" type="button">TAMBAH PENERBANGAN</button>':kind==='RINGKASAN'?'<button id="corAddIncident" type="button">TAMBAH RINGKASAN</button>':'';
   panel.innerHTML=`<div class="section-head"><div><p class="eyebrow">CONTROL ROOM</p><h2>${title}</h2><p class="muted">${desc}</p></div><div class="adu-actions">${add}<button id="corIcpDataRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corIcpDataClose" type="button" class="ghost">TUTUP</button></div></div><div id="corIcpDataBody"><p class="muted">Memuatkan data...</p></div><p id="corIcpDataStatus" class="status"></p>`;
   $('#corIcpDataClose').onclick=()=>{panel.hidden=true;panel.style.setProperty('display','none','important');if(placeholder)placeholder.style.display='';};
@@ -245,6 +249,16 @@ async function loadCorIcpData(kind){
     const body=rows.map((w,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(w.nama_waris||'-')}</strong>`)}${icpTd(esc(w.nama_mangsa||'-'))}${icpTd(esc(w.no_pengenalan||'-'))}${icpTd(esc(w.no_telefon||'-'))}${icpTd(esc(w.hubungan||'-'))}${icpTd(esc(statusLabel(w.status)))}${icpTd(esc(w.masa_tiba_ffha?fmt(w.masa_tiba_ffha):'-'))}${icpTd(esc(w.masa_bertolak_pma?fmt(w.masa_bertolak_pma):'-'))}${icpTd(esc(w.masa_tiba_pma?fmt(w.masa_tiba_pma):'-'))}${icpTd(esc(w.catatan||'-'))}</tr>`).join('');
     box.innerHTML=icpTable(['BIL','NAMA WARIS','NAMA MANGSA','NO. KP / PASPORT','NO. TELEFON','HUBUNGAN','STATUS','MASA TIBA FFHA','MASA BERTOLAK PMA','MASA TIBA PMA','CATATAN'],body,'1550px');
     if(status)status.textContent=`${rows.length} rekod waris daripada aliran FFHA.`;
+    return;
+  }
+  if(kind==='VIP' || kind==='MEDIA'){
+    const table=kind==='VIP'?'ecor_vip':'ecor_media';
+    const label=kind==='VIP'?'VIP':'MEDIA';
+    const q=await supabase.from(table).select('*').eq('operasi_id',assignment.operasi_id).order('masa_daftar',{ascending:false});
+    if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;}const rows=q.data||[];
+    const body=rows.map((r,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(r.nama||'-')}</strong>`)}${icpTd(esc(r.no_pengenalan||'-'))}${icpTd(esc(r.organisasi||'-'))}${icpTd(esc(r.jawatan||'-'))}${icpTd(esc(r.no_telefon||'-'))}${icpTd(esc(r.masa_daftar?fmt(r.masa_daftar):'-'))}${icpTd(esc(String(r.status||'-').replaceAll('_',' ')))}${icpTd(esc(r.catatan||'-'))}</tr>`).join('');
+    box.innerHTML=icpTable(['BIL','NAMA','NO. KP / PASPORT','ORGANISASI / AGENSI','JAWATAN / PERANAN','NO. TELEFON','MASA DAFTAR','STATUS','CATATAN'],body,'1300px');
+    if(status)status.textContent=`${rows.length} rekod ${label} bagi operasi semasa.`;
     return;
   }
   const q=await supabase.from('ecor_cor_ringkasan_kejadian').select('*').eq('operasi_id',assignment.operasi_id).order('tarikh',{ascending:true}).order('masa',{ascending:true});
