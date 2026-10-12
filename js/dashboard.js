@@ -566,7 +566,11 @@ async function loadCorInboxModal(type){
 
   const {data,error}=await query;
   if(error){box.innerHTML=`<p class="status">${esc(error.message)}</p>`;return;}
-  const rows=data||[];
+  let rows=data||[];
+  // FIX 112: Peti Masuk BHA hanya menerima komunikasi daripada ICP.
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='BHA'){
+    rows=rows.filter(x=>String(x.dari?.kod||'').trim().toUpperCase()==='ICP');
+  }
 
   // LAPORAN menggunakan paparan/tindakan Peti Masuk COR sebenar.
   if(kind==='LAPORAN'){
@@ -663,7 +667,10 @@ async function loadCorCommunicationLogModal(){
     kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)
   `).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:false});
   if(error){box.innerHTML=`<p class="status">${esc(error.message)}</p>`;return;}
-  const rows=(data||[]).filter(x=>x.dari_tempat_tugas_id===assignment.tempat_tugas_id || x.kepada_tempat_tugas_id===assignment.tempat_tugas_id);
+  let rows=(data||[]).filter(x=>x.dari_tempat_tugas_id===assignment.tempat_tugas_id || x.kepada_tempat_tugas_id===assignment.tempat_tugas_id);
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='BHA'){
+    rows=rows.filter(x=>{const from=String(x.dari?.kod||'').trim().toUpperCase(),to=String(x.kepada?.kod||'').trim().toUpperCase();return (from==='BHA'&&to==='ICP')||(from==='ICP'&&to==='BHA');});
+  }
   box.innerHTML=rows.length?rows.map(messageCard).join(''):'<p class="muted">Tiada komunikasi direkodkan.</p>';
 }
 
@@ -820,6 +827,7 @@ async function loadAssignment() {
   setupFfrcTopMenu();
   setupFfhaTopMenu();
   setupPmaTopMenu();
+  setupBhaTopMenu();
   applyPmaCleanLayout();
 }
 
@@ -1051,12 +1059,12 @@ async function loadCommunication() {
     x.dari_tempat_tugas_id === assignment.tempat_tugas_id ||
     x.kepada_tempat_tugas_id === assignment.tempat_tugas_id
   );
-  // FIX 045: pada dashboard BHA, komunikasi yang kelihatan hanya COR ⇄ BHA.
+  // FIX 112: BHA dikunci kepada saluran komunikasi ICP ⇄ BHA sahaja.
   if (String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase() === 'BHA') {
     rows = rows.filter(x => {
       const from = String(x.dari?.kod || '').trim().toUpperCase();
       const to = String(x.kepada?.kod || '').trim().toUpperCase();
-      return (from === 'BHA' && to === 'COR') || (from === 'COR' && to === 'BHA');
+      return (from === 'BHA' && to === 'ICP') || (from === 'ICP' && to === 'BHA');
     });
   }
   // FIX 068: ringkasan komunikasi yang BELUM DIBACA sahaja.
@@ -1702,6 +1710,58 @@ async function replyBhaToIcp(source) {
   await loadCommunication();
 }
 
+
+
+// ===== FIX 112: BHA — MENU 3 TITIK / KOMUNIKASI KHAS ICP =====
+function setupBhaTopMenu(){
+  const header=document.querySelector('header.top');
+  const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
+  if(!header||code!=='BHA')return;
+  let wrap=$('#bhaTopMenu');
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='bhaTopMenu';wrap.className='cor-top-menu';
+    wrap.innerHTML=`<button id="bhaTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu BHA" aria-expanded="false">⋮</button>
+      <div id="bhaTopMenuDropdown" class="cor-menu-dropdown" hidden>
+        <div class="cor-menu-parent" id="bhaInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="bhaInboxSubmenu" hidden>
+            <button type="button" data-bha-menu="inbox-report">LAPORAN</button>
+            <button type="button" data-bha-menu="inbox-instruction">ARAHAN</button>
+          </div>
+        </div>
+        <button type="button" data-bha-menu="chronology">KRONOLOGI</button>
+        <button type="button" data-bha-menu="movement">NOTIFIKASI PERGERAKAN MANGSA</button>
+        <button type="button" data-bha-menu="communication-log">LOG KOMUNIKASI</button>
+      </div>`;
+    header.insertBefore(wrap,header.firstChild);
+  }
+  const toggle=$('#bhaTopMenuToggle'),drop=$('#bhaTopMenuDropdown'),inboxMenu=$('#bhaInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#bhaInboxSubmenu');
+  if(!toggle||!drop)return;
+  const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxBtn?.setAttribute('aria-expanded','false')};
+  const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxBtn?.setAttribute('aria-expanded','true')};
+  const close=()=>{drop.hidden=true;toggle.setAttribute('aria-expanded','false');closeInbox()};
+  if(toggle.dataset.bound!=='1'){
+    toggle.dataset.bound='1';
+    toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};
+    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);
+    inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
+    drop.addEventListener('click',async e=>{
+      const b=e.target.closest('[data-bha-menu]');if(!b)return;const a=b.dataset.bhaMenu;close();
+      if(a==='inbox-report')await openCorInbox('LAPORAN');
+      if(a==='inbox-instruction')await openCorInbox('ARAHAN');
+      if(a==='chronology'){
+        await loadCommunication();
+        const p=$('#chronologyPanel');if(p){p.hidden=false;p.style.removeProperty('display');p.scrollIntoView({behavior:'smooth',block:'start'});}
+      }
+      if(a==='movement'){
+        const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}
+      }
+      if(a==='communication-log')await openCorCommunicationLog();
+    });
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  }
+}
 
 // ===== FIX 089: MENU ACCC SAMA SEPERTI COR (CARTA BACA SAHAJA) =====
 function setupAcccTopMenu(){
