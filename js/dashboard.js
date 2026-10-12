@@ -3089,8 +3089,33 @@ async function loadAduChronology(){
   const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
   box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
 }
+function hideAduLegacyCommunicationPanels(){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ADU')return;
+  const hide=(el)=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  hide($('#instructionList')?.closest('section.panel'));
+  hide($('#chronologyPanel'));
+  hide($('#historyList')?.closest('section.panel'));
+}
+function setupAduLegacyPanelGuard(){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='ADU')return;
+  hideAduLegacyCommunicationPanels();
+  if(document.body.dataset.aduLegacyGuard==='1')return;
+  document.body.dataset.aduLegacyGuard='1';
+  const observer=new MutationObserver(()=>hideAduLegacyCommunicationPanels());
+  observer.observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
+}
 function setupAduTopMenu(){
   const header=document.querySelector('header.top');const isAdu=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='ADU';if(!header||!isAdu)return;
+  setupAduLegacyPanelGuard();
+
+  // FIX 104: ADU - sembunyikan kad ringkasan Arahan Diterima pada paparan utama.
+  // Arahan kekal boleh dicapai melalui menu ⋮ > PETI MASUK > ARAHAN.
+  const instructionCount=$('#instructionCount');
+  const instructionCard=instructionCount?.closest('article.card');
+  if(instructionCard){
+    instructionCard.hidden=true;
+    instructionCard.style.setProperty('display','none','important');
+  }
   let wrap=$('#aduTopMenu');
   if(!wrap){
     wrap=document.createElement('div');wrap.id='aduTopMenu';wrap.className='cor-top-menu';
