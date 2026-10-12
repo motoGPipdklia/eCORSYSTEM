@@ -3102,8 +3102,27 @@ async function showFfrcMenuView(kind){
   if(isSrc)await loadFfrcSrcVictims();else await loadFfrcChronology();
   chart.scrollIntoView({behavior:'smooth',block:'start'});
 }
+function hideFfrcLegacyCommunicationPanels(){
+  if(dutyCode()!=='FFRC')return;
+  const hide=(el)=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  hide($('#instructionList')?.closest('section.panel'));
+  hide($('#chronologyPanel'));
+  hide($('#historyList')?.closest('section.panel'));
+}
+function setupFfrcLegacyPanelGuard(){
+  if(dutyCode()!=='FFRC')return;
+  hideFfrcLegacyCommunicationPanels();
+  if(document.body.dataset.ffrcLegacyGuard==='1')return;
+  document.body.dataset.ffrcLegacyGuard='1';
+  const observer=new MutationObserver(()=>hideFfrcLegacyCommunicationPanels());
+  observer.observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
+}
 function setupFfrcTopMenu(){
   const header=document.querySelector('header.top');if(!header||dutyCode()!=='FFRC')return;
+  setupFfrcLegacyPanelGuard();
+  const instructionCount=$('#instructionCount');
+  const instructionCard=instructionCount?.closest('article.card');
+  if(instructionCard){instructionCard.hidden=true;instructionCard.style.setProperty('display','none','important');}
   let wrap=$('#ffrcTopMenu');
   if(!wrap){
     wrap=document.createElement('div');wrap.id='ffrcTopMenu';wrap.className='cor-top-menu';
