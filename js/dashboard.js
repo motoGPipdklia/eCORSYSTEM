@@ -2836,6 +2836,15 @@ function setupTriageLegacyPanelGuard(){
 function setupTriageTopMenu(){
   const header=document.querySelector('header.top');const isTriage=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='TRIAGE';if(!header||!isTriage)return;
   setupTriageLegacyPanelGuard();
+
+  // FIX 097: kad ringkasan 'Arahan Diterima' tidak dipaparkan pada dashboard TRIAGE.
+  // Arahan kekal boleh diakses melalui menu ⋮ > PETI MASUK > ARAHAN.
+  const instructionCount=$('#instructionCount');
+  const instructionCard=instructionCount?.closest('article.card');
+  if(instructionCard){
+    instructionCard.hidden=true;
+    instructionCard.style.setProperty('display','none','important');
+  }
   let wrap=$('#triageTopMenu');
   if(!wrap){
     wrap=document.createElement('div');wrap.id='triageTopMenu';wrap.className='cor-top-menu';
