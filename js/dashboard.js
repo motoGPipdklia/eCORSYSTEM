@@ -1692,7 +1692,7 @@ function setupAcccTopMenu(){
           <button type="button" data-accc-menu="chronology">KRONOLOGI</button><button type="button" data-accc-menu="victims">MANGSA</button><button type="button" data-accc-menu="responder">RESPONDER</button><button type="button" data-accc-menu="flight">MAKLUMAT PENERBANGAN</button><button type="button" data-accc-menu="incident-summary">RINGKASAN KEJADIAN</button>
         </div></div>
       <div class="cor-menu-parent" id="acccInboxMenu"><button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
-        <div class="cor-menu-submenu" id="acccInboxSubmenu" hidden><button type="button" data-accc-menu="inbox-report">LAPORAN</button><button type="button" data-accc-menu="inbox-instruction">ARAHAN</button></div></div>
+        <div class="cor-menu-submenu" id="acccInboxSubmenu" hidden><button type="button" data-accc-menu="inbox-report">LAPORAN</button></div></div>
       <button type="button" data-accc-menu="movement">PERGERAKAN MANGSA</button><button type="button" data-accc-menu="communication-log">LOG KOMUNIKASI</button>
     </div>`;header.insertBefore(wrap,header.firstChild);
   }
@@ -1713,9 +1713,42 @@ function setupAcccTopMenu(){
     if(a==='movement'){const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}}
     if(a==='communication-log')await openCorCommunicationLog();
     if(a==='inbox-report')await openCorInbox('LAPORAN');
-    if(a==='inbox-instruction')await openCorInbox('ARAHAN');
   });
   document.addEventListener('click',e=>{if(!wrap.contains(e.target))closeAll();});
+}
+
+function applyAcccDashboardLayout(){
+  const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
+  if(code!=='ACCC') return;
+
+  // Kad Arahan Diterima (kad tengah) disembunyikan untuk ACCC.
+  const instructionCount=$('#instructionCount');
+  const instructionCard=instructionCount?.closest('article.card');
+  if(instructionCard){
+    instructionCard.hidden=true;
+    instructionCard.style.setProperty('display','none','important');
+  }
+
+  // Panel Arahan Diterima lama disembunyikan. Arahan tidak digunakan dalam Peti Masuk ACCC.
+  const instructionPanel=$('#instructionList')?.closest('section.panel');
+  if(instructionPanel){
+    instructionPanel.hidden=true;
+    instructionPanel.style.setProperty('display','none','important');
+  }
+
+  // Kad ringkasan komunikasi ACCC hanya memaparkan LAPORAN.
+  const summary=$('.communication-summary-card');
+  if(summary){
+    const unread=Number($('#unreadReportCount')?.textContent||0);
+    summary.innerHTML=`<h2>Laporan</h2><div style="margin-top:14px"><small>LAPORAN</small><div class="metric" id="unreadReportCount">${unread}</div><p>Belum dibaca.</p></div><div id="communicationCount" hidden>0</div>`;
+  }
+
+  // Ruang Kawalan Krisis Utama / peti masuk lama ACCC tidak dipaparkan.
+  const control=$('#acccControlPanel');
+  if(control){
+    control.hidden=true;
+    control.style.setProperty('display','none','important');
+  }
 }
 
 async function renderAcccRoom() {
@@ -1725,6 +1758,11 @@ async function renderAcccRoom() {
   const code = assignment?.ecor_tempat_tugas?.kod;
   if (code !== 'ACCC') return;
   setupAcccTopMenu();
+  applyAcccDashboardLayout();
+
+  // FIX 090: ruang "ACCC — Kawalan Krisis Utama" tidak lagi dibina.
+  // Laporan dibuka melalui MENU > PETI MASUK > LAPORAN.
+  return;
 
   const panel = document.createElement('section');
   panel.id = 'acccControlPanel';
