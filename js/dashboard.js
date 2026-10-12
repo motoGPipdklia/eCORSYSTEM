@@ -252,6 +252,75 @@ async function editCorIncident(row=null){
 async function deleteCorIncident(id){if(!confirm('Padam rekod Ringkasan Kejadian ini?'))return;const q=await supabase.from('ecor_cor_ringkasan_kejadian').delete().eq('id',id).eq('operasi_id',assignment.operasi_id);if(q.error){alert(q.error.message);return;}await loadCorIcpData('RINGKASAN');}
 
 
+
+// ===== FIX 087: MENU TEC — CARTA, PETI MASUK, KRONOLOGI, PERGERAKAN & WARIS =====
+function getTecChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section.panel')||heading?.closest('section')||null;
+}
+function closeTecChartContent(){
+  const host=$('#tecChartContent'); if(host){host.hidden=true;host.style.display='none';}
+}
+async function getTecHierarchy(){
+  const q=await supabase.from('ecor_tempat_tugas').select('id,kod,nama,parent_id');
+  if(q.error) throw q.error;
+  const places=q.data||[], tecId=assignment.tempat_tugas_id, ids=new Set([tecId]), queue=[tecId];
+  while(queue.length){const pid=queue.shift();for(const x of places.filter(y=>y.parent_id===pid)){if(!ids.has(x.id)){ids.add(x.id);queue.push(x.id);}}}
+  const cor=places.find(x=>String(x.kod||'').trim().toUpperCase()==='COR'); if(cor)ids.add(cor.id);
+  return {places,ids};
+}
+async function showTecChart(kind){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='TEC')return;
+  if(kind==='MOVEMENT'){
+    closeTecChartContent(); const p=$('#victimMovementPanel'); if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});} return;
+  }
+  const panel=getTecChartPanel();if(!panel)return;
+  $('#victimMovementPanel')?.style.setProperty('display','none','important');
+  panel.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');
+  let host=$('#tecChartContent');if(!host){host=document.createElement('div');host.id='tecChartContent';panel.appendChild(host);}
+  host.hidden=false;host.style.display='block';
+  const title=kind==='KRONOLOGI'?'Kronologi TEC':'Waris';
+  const desc=kind==='KRONOLOGI'?'Hanya komunikasi COR ↔ TEC dan TEC ↔ submodul di bawah TEC.':'Maklumat waris bagi operasi semasa.';
+  host.innerHTML=`<div class="section-head" style="margin-top:14px"><div><p class="eyebrow">TEC</p><h3>${title}</h3><p class="muted">${desc}</p></div><div class="adu-actions"><button id="tecChartRefresh" class="ghost">MUAT SEMULA</button><button id="tecChartClose" class="ghost">TUTUP</button></div></div><div id="tecChartBody"><p class="muted">Memuatkan...</p></div>`;
+  $('#tecChartClose').onclick=()=>{host.hidden=true;host.style.display='none';panel.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');};
+  $('#tecChartRefresh').onclick=()=>loadTecChart(kind);
+  await loadTecChart(kind); panel.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadTecChart(kind){
+  const box=$('#tecChartBody');if(!box)return;
+  if(kind==='KRONOLOGI'){
+    let hierarchy;try{hierarchy=await getTecHierarchy();}catch(e){box.innerHTML=`<p class="status">${esc(e.message)}</p>`;return;}
+    const tecId=assignment.tempat_tugas_id, childIds=new Set([...hierarchy.ids].filter(id=>id!==tecId));
+    const cor=hierarchy.places.find(x=>String(x.kod||'').trim().toUpperCase()==='COR');
+    const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,status,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+    if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+    const rows=(q.data||[]).filter(x=>{
+      const a=x.dari_tempat_tugas_id,b=x.kepada_tempat_tugas_id;
+      const corTec=cor&&((a===cor.id&&b===tecId)||(a===tecId&&b===cor.id));
+      const tecSub=(a===tecId&&childIds.has(b))||(b===tecId&&childIds.has(a));
+      return corTec||tecSub;
+    });
+    const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
+    box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');return;
+  }
+  const q=await supabase.from('ecor_waris').select('*').eq('operasi_id',assignment.operasi_id).order('masa_daftar',{ascending:false});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const rows=q.data||[];
+  const body=rows.map((w,i)=>`${icpTd(i+1)}${icpTd(`<strong>${esc(w.nama_waris||'-')}</strong>`)}${icpTd(esc(w.no_pengenalan||'-'))}${icpTd(esc(w.hubungan||'-'))}${icpTd(esc(w.nama_mangsa||'-'))}${icpTd(esc(String(w.status||'-').replaceAll('_',' ')))}${icpTd(esc(fmt(w.masa_daftar)))}`).map((cells)=>`<tr>${cells}</tr>`).join('');
+  box.innerHTML=icpTable(['BIL','NAMA WARIS','NO. KP / PASPORT','HUBUNGAN','NAMA MANGSA','STATUS','MASA DAFTAR'],body,'1050px');
+}
+function setupTecTopMenu(){
+  const header=document.querySelector('header.top');const isTec=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='TEC';if(!header||!isTec)return;
+  const oldInstruction=$('#instructionList')?.closest('section.panel');if(oldInstruction){oldInstruction.hidden=true;oldInstruction.style.setProperty('display','none','important');}
+  const chronology=$('#chronologyPanel');if(chronology){chronology.hidden=true;chronology.style.setProperty('display','none','important');}
+  const history=$('#historyList')?.closest('section.panel');if(history){history.hidden=true;history.style.setProperty('display','none','important');}
+  const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+  let wrap=$('#tecTopMenu');if(!wrap){wrap=document.createElement('div');wrap.id='tecTopMenu';wrap.className='cor-top-menu';wrap.innerHTML=`<button id="tecTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu TEC" aria-expanded="false">⋮</button><div id="tecTopMenuDropdown" class="cor-menu-dropdown" hidden><div class="cor-menu-parent" id="tecChartMenu"><button type="button" class="cor-menu-chart" aria-haspopup="true" aria-expanded="false">CARTA <span>▶</span></button><div class="cor-menu-submenu" id="tecChartSubmenu" hidden><button type="button" data-tec-menu="chronology">KRONOLOGI</button><button type="button" data-tec-menu="movement">PERGERAKAN MANGSA</button><button type="button" data-tec-menu="waris">WARIS</button></div></div><div class="cor-menu-parent" id="tecInboxMenu"><button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button><div class="cor-menu-submenu" id="tecInboxSubmenu" hidden><button type="button" data-tec-menu="inbox-report">LAPORAN</button><button type="button" data-tec-menu="inbox-instruction">ARAHAN</button></div></div></div>`;header.insertBefore(wrap,header.firstChild);}
+  const toggle=$('#tecTopMenuToggle'),drop=$('#tecTopMenuDropdown'),cm=$('#tecChartMenu'),cb=cm?.querySelector('.cor-menu-chart'),cs=$('#tecChartSubmenu'),im=$('#tecInboxMenu'),ib=im?.querySelector('.cor-menu-inbox'),is=$('#tecInboxSubmenu');if(!toggle||!drop)return;
+  const cc=()=>{if(cs)cs.hidden=true;cb?.setAttribute('aria-expanded','false')},oc=()=>{if(cs)cs.hidden=false;cb?.setAttribute('aria-expanded','true')},ci=()=>{if(is)is.hidden=true;ib?.setAttribute('aria-expanded','false')},oi=()=>{if(is)is.hidden=false;ib?.setAttribute('aria-expanded','true')},close=()=>{drop.hidden=true;toggle.setAttribute('aria-expanded','false');cc();ci();};
+  if(toggle.dataset.bound!=='1'){toggle.dataset.bound='1';toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};cm?.addEventListener('mouseenter',oc);cm?.addEventListener('mouseleave',cc);cb?.addEventListener('click',e=>{e.stopPropagation();ci();cs.hidden?oc():cc()});im?.addEventListener('mouseenter',()=>{cc();oi()});im?.addEventListener('mouseleave',ci);ib?.addEventListener('click',e=>{e.stopPropagation();cc();is.hidden?oi():ci()});drop.addEventListener('click',async e=>{const b=e.target.closest('[data-tec-menu]');if(!b)return;const a=b.dataset.tecMenu;close();if(a==='chronology')await showTecChart('KRONOLOGI');if(a==='movement')await showTecChart('MOVEMENT');if(a==='waris')await showTecChart('WARIS');if(a==='inbox-report')await openCorInbox('LAPORAN');if(a==='inbox-instruction')await openCorInbox('ARAHAN');});document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});}
+}
+
 // ===== FIX 079: MENU BERTINGKAT ICP =====
 function setupIcpTopMenu(){
   const header=document.querySelector('header.top');
@@ -726,6 +795,7 @@ async function loadAssignment() {
   await renderCorAduStatus();
   setupCorTopMenu();
   setupIcpTopMenu();
+  setupTecTopMenu();
 }
 
 
@@ -1978,7 +2048,7 @@ async function forwardIcpReport(source, button) {
 }
 
 // ===== FIX 035: PERGERAKAN MANGSA BERPUSAT =====
-const movementCodes=['TRIAGE','ADU','SRC','BHA','HOSPITAL','PMA','COR'];
+const movementCodes=['TRIAGE','ADU','SRC','BHA','HOSPITAL','PMA','COR','TEC'];
 const movementLabel=d=>({SRC:'MANGSA DALAM PERJALANAN KE SRC',ADU:'MANGSA DALAM PERJALANAN KE ADU',HOSPITAL:'MANGSA DALAM PERJALANAN KE HOSPITAL',BHA:'MANGSA KE BHA',PMA:'MANGSA DALAM PERJALANAN KE PMA'})[String(d||'').toUpperCase()]||`MANGSA DALAM PERJALANAN KE ${String(d||'-').toUpperCase()}`;
 async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
  const payload={operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||null,asal:String(asal).toUpperCase(),destinasi:String(destinasi).toUpperCase(),destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
@@ -1987,11 +2057,11 @@ async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
 }
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
- const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(code==='COR')p.hidden=true;
- const movementActions=code==='COR'?`<div class="adu-actions"><button id="movementRefresh" class="ghost">MUAT SEMULA</button><button id="movementClose" class="ghost">TUTUP</button></div>`:`<button id="movementRefresh" class="ghost">MUAT SEMULA</button>`;
- p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja. COR boleh melihat semua pergerakan mangsa.</p></div>${movementActions}</div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
+ const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(['COR','TEC'].includes(code))p.hidden=true;
+ const movementActions=['COR','TEC'].includes(code)?`<div class="adu-actions"><button id="movementRefresh" class="ghost">MUAT SEMULA</button><button id="movementClose" class="ghost">TUTUP</button></div>`:`<button id="movementRefresh" class="ghost">MUAT SEMULA</button>`;
+ const movementDesc=code==='TEC'?'Paparan TEC hanya melibatkan pergerakan mangsa yang masuk ke atau keluar dari SRC dan PMA.':'Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja. COR boleh melihat semua pergerakan mangsa.'; p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">${movementDesc}</p></div>${movementActions}</div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
  const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements;
- if(code==='COR'&&$('#movementClose'))$('#movementClose').onclick=()=>{p.hidden=true;};
+ if(['COR','TEC'].includes(code)&&$('#movementClose'))$('#movementClose').onclick=()=>{p.hidden=true;};
  await loadVictimMovements();
 }
 async function loadVictimMovements(){
@@ -2000,7 +2070,7 @@ async function loadVictimMovements(){
  const box=$('#movementList');if(!box)return;if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
  const allRows=q.data||[];
  // FIX 038: setiap lokasi hanya melihat pergerakan MASUK / KELUAR lokasi sendiri. COR melihat semua.
- const rows=code==='COR'?allRows:allRows.filter(m=>String(m.asal||'').trim().toUpperCase()===code||String(m.destinasi||'').trim().toUpperCase()===code);
+ const rows=code==='COR'?allRows:code==='TEC'?allRows.filter(m=>['SRC','PMA'].includes(String(m.asal||'').trim().toUpperCase())||['SRC','PMA'].includes(String(m.destinasi||'').trim().toUpperCase())):allRows.filter(m=>String(m.asal||'').trim().toUpperCase()===code||String(m.destinasi||'').trim().toUpperCase()===code);
  const notif=m=>String(m.status).toUpperCase()==='TIBA'?`MANGSA TELAH TIBA DI ${String(m.destinasi||'-').toUpperCase()}`:movementLabel(m.destinasi);
  box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1180px"><thead><tr><th>BIL</th><th>NOTIFIKASI</th><th>ID MANGSA</th><th>TAG</th><th>ASAL</th><th>DESTINASI</th><th>MASA BERTOLAK</th><th>MASA SAMPAI</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td><strong>${esc(notif(m))}</strong></td><td><b>${esc(m.no_mangsa)}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(m.asal)}</td><td>${esc(m.destinasi_nama||m.destinasi)}</td><td>${esc(fmt(m.masa_bertolak))}</td><td>${m.masa_tiba?esc(fmt(m.masa_tiba)):'-'}</td><td>${esc(m.catatan||'-')}</td><td>${String(m.status).toUpperCase()==='TIBA'?'<span class="adu-status-active"><b>TIBA</b></span>':(m.destinasi===code?`<button data-confirm-move="${m.id}">SAHKAN TIBA DI ${esc(code)}</button>`:'<span class="muted">DALAM PERJALANAN</span>')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada rekod pergerakan mangsa.</p>';
  box.querySelectorAll('[data-confirm-move]').forEach(b=>b.onclick=()=>confirmVictimArrival(rows.find(x=>x.id===b.dataset.confirmMove)));
