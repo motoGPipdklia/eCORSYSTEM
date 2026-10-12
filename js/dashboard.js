@@ -1730,6 +1730,16 @@ function applyAcccDashboardLayout(){
   const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
   if(code!=='ACCC') return;
 
+  // FIX 092: ACCC ialah pusat kawalan peringkat atas; kad SALURAN ATASAN tidak dipaparkan.
+  const parentCode=$('#parentCode');
+  const parentCard=parentCode?.closest('.assignment-focus > div') || parentCode?.parentElement;
+  if(parentCard){
+    parentCard.hidden=true;
+    parentCard.style.setProperty('display','none','important');
+  }
+  const focus=document.querySelector('.assignment-focus');
+  if(focus) focus.classList.add('accc-no-parent');
+
   // Kad Arahan Diterima (kad tengah) disembunyikan untuk ACCC.
   const instructionCount=$('#instructionCount');
   const instructionCard=instructionCount?.closest('article.card');
