@@ -2818,8 +2818,24 @@ async function loadTriageChronology(){
   const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
   box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
 }
+function hideTriageLegacyCommunicationPanels(){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='TRIAGE')return;
+  const hide=(el)=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  hide($('#instructionList')?.closest('section.panel'));
+  hide($('#chronologyPanel'));
+  hide($('#historyList')?.closest('section.panel'));
+}
+function setupTriageLegacyPanelGuard(){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='TRIAGE')return;
+  hideTriageLegacyCommunicationPanels();
+  if(document.body.dataset.triageLegacyGuard==='1')return;
+  document.body.dataset.triageLegacyGuard='1';
+  const observer=new MutationObserver(()=>hideTriageLegacyCommunicationPanels());
+  observer.observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
+}
 function setupTriageTopMenu(){
   const header=document.querySelector('header.top');const isTriage=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='TRIAGE';if(!header||!isTriage)return;
+  setupTriageLegacyPanelGuard();
   let wrap=$('#triageTopMenu');
   if(!wrap){
     wrap=document.createElement('div');wrap.id='triageTopMenu';wrap.className='cor-top-menu';
