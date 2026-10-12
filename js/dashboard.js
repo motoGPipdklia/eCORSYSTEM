@@ -76,6 +76,8 @@ function setupCorTopMenu(){
           <div class="cor-menu-submenu" id="corChartSubmenu" hidden>
             <button type="button" data-cor-menu="chronology">KRONOLOGI</button>
             <button type="button" data-cor-menu="victims">MANGSA</button>
+            <button type="button" data-cor-menu="responder">RESPONDER</button>
+            <button type="button" data-cor-menu="flight">MAKLUMAT PENERBANGAN</button>
           </div>
         </div>
         <div class="cor-menu-parent" id="corInboxMenu">
@@ -161,6 +163,8 @@ function setupCorTopMenu(){
       closeMenu();
       if(action==='chronology') $('#corChronologyToggle')?.click();
       if(action==='victims') $('#corVictimToggle')?.click();
+      if(action==='responder') showCorIcpData('RESPONDER');
+      if(action==='flight') showCorIcpData('PENERBANGAN');
       if(action==='movement'){
         const panel=$('#victimMovementPanel');
         if(panel){
@@ -180,6 +184,74 @@ function setupCorTopMenu(){
   }
 }
 
+
+
+// ===== FIX 084: COR — RESPONDER & MAKLUMAT PENERBANGAN DARIPADA ICP =====
+function getCorChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section')||null;
+}
+
+function closeOtherCorChartViews(){
+  const chronology=$('#chronologyPanel');
+  if(chronology){chronology.hidden=true;chronology.style.setProperty('display','none','important');}
+  const victims=$('#corAduPanel');
+  if(victims){victims.hidden=true;victims.style.setProperty('display','none','important');}
+  $('#corChronologyToggle')?.setAttribute('aria-expanded','false');
+  $('#corVictimToggle')?.setAttribute('aria-expanded','false');
+}
+
+async function showCorIcpData(kind){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='COR') return;
+  const chartPanel=getCorChartPanel();
+  if(!chartPanel) return;
+  closeOtherCorChartViews();
+  const placeholder=chartPanel.querySelector(':scope > p.muted');
+  if(placeholder) placeholder.style.display='none';
+
+  let panel=$('#corIcpDataPanel');
+  if(!panel){
+    panel=document.createElement('div');
+    panel.id='corIcpDataPanel';
+    panel.style.marginTop='18px';
+    chartPanel.appendChild(panel);
+  }
+  panel.hidden=false;
+  panel.style.removeProperty('display');
+  const isResponder=kind==='RESPONDER';
+  panel.innerHTML=`
+    <div class="section-head">
+      <div><p class="eyebrow">DATA ICP</p><h2>${isResponder?'Responder':'Maklumat Penerbangan'}</h2>
+      <p class="muted">Paparan baca sahaja. Data ini diambil terus daripada rekod ICP.</p></div>
+      <div class="adu-actions"><button id="corIcpDataRefresh" type="button" class="ghost">MUAT SEMULA</button><button id="corIcpDataClose" type="button" class="ghost">TUTUP</button></div>
+    </div>
+    <div id="corIcpDataBody"><p class="muted">Memuatkan data ICP...</p></div>
+    <p id="corIcpDataStatus" class="status"></p>`;
+  $('#corIcpDataClose').onclick=()=>{panel.hidden=true;panel.style.setProperty('display','none','important');if(placeholder)placeholder.style.display='';};
+  $('#corIcpDataRefresh').onclick=()=>loadCorIcpData(kind);
+  await loadCorIcpData(kind);
+  chartPanel.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function loadCorIcpData(kind){
+  const box=$('#corIcpDataBody'), status=$('#corIcpDataStatus');
+  if(!box) return;
+  box.innerHTML='<p class="muted">Memuatkan data ICP...</p>';
+  if(status) status.textContent='';
+  if(kind==='RESPONDER'){
+    const q=await supabase.from('ecor_icp_responder').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+    if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;}
+    const rows=q.data||[];
+    const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(x.agensi||'-')}</strong>`)}${icpTd(Number(x.pegawai)||0)}${icpTd(Number(x.anggota)||0)}${icpTd((Number(x.pegawai)||0)+(Number(x.anggota)||0))}${icpTd(esc(x.jentera||'-'))}${icpTd(esc(x.kenderaan||'-'))}${icpTd(esc(x.masa_tiba?new Date(x.masa_tiba).toLocaleString('ms-MY'):'-'))}${icpTd(esc(x.catatan||'-'))}</tr>`).join('');
+    box.innerHTML=icpTable(['BIL','AGENSI','PEGAWAI','ANGGOTA','JUMLAH KEKUATAN','JENTERA','KENDERAAN','MASA TIBA','CATATAN'],body,'1200px');
+    return;
+  }
+  const q=await supabase.from('ecor_icp_penerbangan').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML='';if(status)status.textContent=q.error.message;return;}
+  const rows=q.data||[];
+  const body=rows.map((x,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(x.no_penerbangan||'-')}</strong>`)}${icpTd(esc(x.syarikat||'-'))}${icpTd(esc(x.jenis_pesawat||'-'))}${icpTd(esc(x.pendaftaran_pesawat||'-'))}${icpTd(esc(x.asal||'-'))}${icpTd(esc(x.destinasi||'-'))}${icpTd(Number(x.penumpang)||0)}${icpTd(Number(x.kru)||0)}${icpTd((Number(x.penumpang)||0)+(Number(x.kru)||0))}${icpTd(esc(x.catatan||'-'))}</tr>`).join('');
+  box.innerHTML=icpTable(['BIL','NO. PENERBANGAN','SYARIKAT','JENIS PESAWAT','PENDAFTARAN','ASAL','DESTINASI','PENUMPANG','KRU','JUMLAH POB','CATATAN'],body,'1450px');
+}
 
 
 
@@ -1002,6 +1074,8 @@ function renderChronology(items) {
 
     const openPanel = () => {
       // Satu paparan sahaja di ruang Carta Operasi pada satu masa.
+      const icpDataPanel=$('#corIcpDataPanel');
+      if(icpDataPanel){icpDataPanel.hidden=true;icpDataPanel.style.setProperty('display','none','important');}
       const victimPanel = $('#corAduPanel');
       if (victimPanel && !victimPanel.hidden) {
         victimPanel.hidden = true;
@@ -2183,6 +2257,8 @@ async function renderCorAduStatus(){
     if(b){b.setAttribute('aria-expanded','false'); b.textContent='MANGSA KESELURUHAN';}
   };
   const openPanel=async()=>{
+    const icpDataPanel=$('#corIcpDataPanel');
+    if(icpDataPanel){icpDataPanel.hidden=true;icpDataPanel.style.setProperty('display','none','important');}
     const chronologyPanel=$('#chronologyPanel');
     if(chronologyPanel && !chronologyPanel.hidden){
       chronologyPanel.hidden=true;
