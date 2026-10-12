@@ -2988,8 +2988,33 @@ async function loadSrcChronology(){
   const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
   box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
 }
+function hideSrcLegacyCommunicationPanels(){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='SRC')return;
+  const hide=(el)=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  hide($('#instructionList')?.closest('section.panel'));
+  hide($('#chronologyPanel'));
+  hide($('#historyList')?.closest('section.panel'));
+}
+function setupSrcLegacyPanelGuard(){
+  if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='SRC')return;
+  hideSrcLegacyCommunicationPanels();
+  if(document.body.dataset.srcLegacyGuard==='1')return;
+  document.body.dataset.srcLegacyGuard='1';
+  const observer=new MutationObserver(()=>hideSrcLegacyCommunicationPanels());
+  observer.observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
+}
 function setupSrcTopMenu(){
   const header=document.querySelector('header.top');const isSrc=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='SRC';if(!header||!isSrc)return;
+  setupSrcLegacyPanelGuard();
+
+  // FIX 100: SRC - sembunyikan kad ringkasan Arahan Diterima.
+  // Arahan masih boleh dibuka melalui menu ⋮ > PETI MASUK > ARAHAN.
+  const instructionCount=$('#instructionCount');
+  const instructionCard=instructionCount?.closest('article.card');
+  if(instructionCard){
+    instructionCard.hidden=true;
+    instructionCard.style.setProperty('display','none','important');
+  }
   let wrap=$('#srcTopMenu');
   if(!wrap){
     wrap=document.createElement('div');wrap.id='srcTopMenu';wrap.className='cor-top-menu';
