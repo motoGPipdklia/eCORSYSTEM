@@ -654,7 +654,7 @@ async function loadAssignment() {
 let corCommandTargets = [];
 
 async function getCorCommandTargets() {
-  if (!assignment || !['COR','ACCC'].includes(String(assignment.ecor_tempat_tugas?.kod || '').trim().toUpperCase())) return [];
+  if (!assignment || !['COR','ACCC','ICP'].includes(String(assignment.ecor_tempat_tugas?.kod || '').trim().toUpperCase())) return [];
 
   const { data, error } = await supabase
     .from('ecor_tempat_tugas')
@@ -688,10 +688,11 @@ async function getCorCommandTargets() {
 
 async function setupCorCommandCard() {
   const sourceCode = String(assignment?.ecor_tempat_tugas?.kod || '').trim().toUpperCase();
-  if (!['COR','ACCC'].includes(sourceCode)) return;
+  if (!['COR','ACCC','ICP'].includes(sourceCode)) return;
 
   let card;
-  if (sourceCode === 'COR') {
+  if (sourceCode === 'COR' || sourceCode === 'ICP') {
+    // COR / ICP: gantikan kad tengah Arahan Diterima kepada Hantar Arahan.
     const count = $('#instructionCount');
     card = count?.closest('article.card');
   } else {
