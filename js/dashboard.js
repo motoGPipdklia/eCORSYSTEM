@@ -844,6 +844,7 @@ async function loadAssignment() {
   setupPmaTopMenu();
   setupBhaTopMenu();
   setupVipMediaTopMenu();
+  setupReportOnlySubmoduleTopMenu();
   applyPmaCleanLayout();
 }
 
@@ -3386,6 +3387,61 @@ function setupVipMediaTopMenu(){
   let wrap=$('#vipMediaTopMenu');if(!wrap){wrap=document.createElement('div');wrap.id='vipMediaTopMenu';wrap.className='cor-top-menu';wrap.innerHTML=`<button id="vipMediaTopMenuToggle" type="button" class="cor-menu-dots" aria-expanded="false">⋮</button><div id="vipMediaTopMenuDropdown" class="cor-menu-dropdown" hidden><div class="cor-menu-parent" id="vipMediaInboxMenu"><button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button><div class="cor-menu-submenu" id="vipMediaInboxSubmenu" hidden><button type="button" data-vm-menu="inbox-report">LAPORAN</button><button type="button" data-vm-menu="inbox-instruction">ARAHAN</button></div></div><button type="button" data-vm-menu="chronology">KRONOLOGI</button><button type="button" data-vm-menu="register">PENDAFTARAN ${c.item}</button><button type="button" data-vm-menu="communication-log">LOG KOMUNIKASI</button></div>`;header.insertBefore(wrap,header.firstChild)}
   const t=$('#vipMediaTopMenuToggle'),d=$('#vipMediaTopMenuDropdown'),im=$('#vipMediaInboxMenu'),ib=im?.querySelector('.cor-menu-inbox'),sub=$('#vipMediaInboxSubmenu');const closeSub=()=>{if(sub)sub.hidden=true;ib?.setAttribute('aria-expanded','false')},openSub=()=>{if(sub)sub.hidden=false;ib?.setAttribute('aria-expanded','true')},close=()=>{d.hidden=true;t.setAttribute('aria-expanded','false');closeSub()};if(t.dataset.bound!=='1'){t.dataset.bound='1';t.onclick=e=>{e.stopPropagation();d.hidden?(d.hidden=false,t.setAttribute('aria-expanded','true')):close()};im?.addEventListener('mouseenter',openSub);im?.addEventListener('mouseleave',closeSub);ib?.addEventListener('click',e=>{e.stopPropagation();sub?.hidden?openSub():closeSub()});d.addEventListener('click',async e=>{const b=e.target.closest('[data-vm-menu]');if(!b)return;const a=b.dataset.vmMenu;close();if(a==='inbox-report')await openCorInbox('LAPORAN');if(a==='inbox-instruction')await openCorInbox('ARAHAN');if(a==='chronology')await showVipMediaView('KRONOLOGI');if(a==='register')await showVipMediaView('REGISTER');if(a==='communication-log'){closeVipMediaViews();await openCorCommunicationLog()}});document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()})}
   const p=$('#vipMediaPanel');if(p){p.hidden=true;p.style.setProperty('display','none','important')}
+}
+
+// ===== FIX 117: SUBMODUL LAPORAN + ARAHAN — MENU 3 TITIK =====
+const REPORT_ONLY_SUBMODULES = [
+  { codes:['MPV'], names:['MOBILE PATROL VEHICLE'], label:'MOBILE PATROL VEHICLE (MPV)' },
+  { codes:['URB'], names:['UNIT RONDA BERMOTOSIKAL'], label:'UNIT RONDA BERMOTOSIKAL (URB)' },
+  { codes:['RVP'], names:['RENDEZVOUS POINT'], label:'RENDEZVOUS POINT (RVP)' },
+  { codes:['INNER CORDON','INNER_CORDON','IC'], names:['INNER CORDON'], label:'INNER CORDON' },
+  { codes:['OUTER CORDON','OUTER_CORDON','OC'], names:['OUTER CORDON'], label:'OUTER CORDON' },
+  { codes:['PASUKAN SIASATAN (DOKUMENTASI)','SIASATAN DOKUMENTASI','DOKUMENTASI'], names:['PASUKAN SIASATAN (DOKUMENTASI)','PASUKAN SIASATAN DOKUMENTASI'], label:'PASUKAN SIASATAN (DOKUMENTASI)' },
+  { codes:['PASUKAN SIASATAN (TEMPAT KEJADIAN)','SIASATAN TEMPAT KEJADIAN','TEMPAT KEJADIAN'], names:['PASUKAN SIASATAN (TEMPAT KEJADIAN)','PASUKAN SIASATAN TEMPAT KEJADIAN'], label:'PASUKAN SIASATAN (TEMPAT KEJADIAN)' },
+  { codes:['KEBAJIKAN'], names:['KEBAJIKAN'], label:'KEBAJIKAN' },
+  { codes:['UNIT BANTUAN','UNIT_BANTUAN'], names:['UNIT BANTUAN'], label:'UNIT BANTUAN' }
+];
+function normSubmoduleText(v){return String(v||'').trim().toUpperCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');}
+function reportOnlySubmoduleConfig(){
+  const code=normSubmoduleText(assignment?.ecor_tempat_tugas?.kod),name=normSubmoduleText(assignment?.ecor_tempat_tugas?.nama);
+  return REPORT_ONLY_SUBMODULES.find(x=>x.codes.some(v=>normSubmoduleText(v)===code)||x.names.some(v=>normSubmoduleText(v)===name)||x.names.some(v=>name.includes(normSubmoduleText(v))))||null;
+}
+function closeReportOnlySubmoduleViews(){
+  const h=$('#reportOnlyChartContent');if(h){h.hidden=true;h.style.setProperty('display','none','important');}
+  getCorChartPanel()?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');
+}
+async function loadReportOnlySubmoduleChronology(){
+  const box=$('#reportOnlyChartBody');if(!box||!assignment)return;
+  const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const own=assignment.tempat_tugas_id,parent=assignment.ecor_tempat_tugas?.parent_id||parentPlace?.id||null;
+  const rows=(q.data||[]).filter(x=>{
+    const involves=x.dari_tempat_tugas_id===own||x.kepada_tempat_tugas_id===own;if(!involves)return false;
+    if(!parent)return true;
+    const other=x.dari_tempat_tugas_id===own?x.kepada_tempat_tugas_id:x.dari_tempat_tugas_id;
+    return other===parent;
+  });
+  const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(cleanChronologyNote(x.kandungan)||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
+}
+async function showReportOnlySubmoduleChronology(){
+  const c=reportOnlySubmoduleConfig(),chart=getCorChartPanel();if(!c||!chart)return;
+  closeReportOnlySubmoduleViews();chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');
+  let h=$('#reportOnlyChartContent');if(!h){h=document.createElement('div');h.id='reportOnlyChartContent';h.style.marginTop='18px';chart.appendChild(h);}
+  h.hidden=false;h.style.removeProperty('display');h.innerHTML=`<div class="section-head"><div><p class="eyebrow">${esc(dutyCode())}</p><h2>KRONOLOGI — ${esc(c.label)}</h2><p class="muted">Komunikasi laporan dan arahan dengan saluran atasan bagi operasi semasa.</p></div><div class="adu-actions"><button id="reportOnlyChronRefresh" class="ghost">MUAT SEMULA</button><button id="reportOnlyChronClose" class="ghost">TUTUP</button></div></div><div id="reportOnlyChartBody"><p class="muted">Memuatkan...</p></div>`;
+  $('#reportOnlyChronClose').onclick=closeReportOnlySubmoduleViews;$('#reportOnlyChronRefresh').onclick=loadReportOnlySubmoduleChronology;await loadReportOnlySubmoduleChronology();chart.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function hideReportOnlyLegacyPanels(){
+  if(!reportOnlySubmoduleConfig())return;const hide=el=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  hide($('#instructionCount')?.closest('article.card'));hide($('#instructionList')?.closest('section.panel'));hide($('#chronologyPanel'));hide($('#historyList')?.closest('section.panel'));hide($('#genericParentInbox'));
+}
+function setupReportOnlySubmoduleTopMenu(){
+  const c=reportOnlySubmoduleConfig(),header=document.querySelector('header.top');if(!c||!header)return;hideReportOnlyLegacyPanels();
+  let wrap=$('#reportOnlyTopMenu');if(!wrap){wrap=document.createElement('div');wrap.id='reportOnlyTopMenu';wrap.className='cor-top-menu';wrap.innerHTML=`<button id="reportOnlyTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu ${esc(c.label)}" aria-expanded="false">⋮</button><div id="reportOnlyTopMenuDropdown" class="cor-menu-dropdown" hidden><div class="cor-menu-parent" id="reportOnlyInboxMenu"><button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button><div class="cor-menu-submenu" id="reportOnlyInboxSubmenu" hidden><button type="button" data-ro-menu="inbox-report">LAPORAN</button><button type="button" data-ro-menu="inbox-instruction">ARAHAN</button></div></div><button type="button" data-ro-menu="chronology">KRONOLOGI</button><button type="button" data-ro-menu="communication-log">LOG KOMUNIKASI</button></div>`;header.insertBefore(wrap,header.firstChild);}
+  const t=$('#reportOnlyTopMenuToggle'),d=$('#reportOnlyTopMenuDropdown'),im=$('#reportOnlyInboxMenu'),ib=im?.querySelector('.cor-menu-inbox'),sub=$('#reportOnlyInboxSubmenu');if(!t||!d)return;
+  const closeSub=()=>{if(sub)sub.hidden=true;ib?.setAttribute('aria-expanded','false')},openSub=()=>{if(sub)sub.hidden=false;ib?.setAttribute('aria-expanded','true')},close=()=>{d.hidden=true;t.setAttribute('aria-expanded','false');closeSub()};
+  if(t.dataset.bound!=='1'){t.dataset.bound='1';t.onclick=e=>{e.stopPropagation();d.hidden?(d.hidden=false,t.setAttribute('aria-expanded','true')):close()};im?.addEventListener('mouseenter',openSub);im?.addEventListener('mouseleave',closeSub);ib?.addEventListener('click',e=>{e.stopPropagation();sub?.hidden?openSub():closeSub()});d.addEventListener('click',async e=>{const b=e.target.closest('[data-ro-menu]');if(!b)return;const a=b.dataset.roMenu;close();if(a==='inbox-report')await openCorInbox('LAPORAN');if(a==='inbox-instruction')await openCorInbox('ARAHAN');if(a==='chronology')await showReportOnlySubmoduleChronology();if(a==='communication-log'){closeReportOnlySubmoduleViews();await openCorCommunicationLog();}});document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});}
+  if(document.body.dataset.reportOnlyGuard!=='1'){document.body.dataset.reportOnlyGuard='1';new MutationObserver(()=>hideReportOnlyLegacyPanels()).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});}
 }
 
 // ===== FIX 109: PMA — MENU 3 TITIK =====
