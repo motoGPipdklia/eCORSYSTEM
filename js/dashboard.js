@@ -808,6 +808,7 @@ async function loadAssignment() {
   setupFfrcTopMenu();
   setupFfhaTopMenu();
   setupPmaTopMenu();
+  applyPmaCleanLayout();
 }
 
 
@@ -3332,6 +3333,23 @@ function setupPmaTopMenu(){
     document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
   }
   const pma=$('#pmaPanel');if(pma&&!pma.dataset.menuManaged){pma.dataset.menuManaged='1';pma.hidden=true;pma.style.setProperty('display','none','important');}
+}
+
+// ===== FIX 110: PMA — KEMAS PAPARAN UTAMA =====
+function applyPmaCleanLayout(){
+  if(dutyCode()!=='PMA')return;
+  const hide=el=>{if(el){el.hidden=true;el.style.setProperty('display','none','important');}};
+  // Kad Arahan Diterima di sebelah Hantar Laporan.
+  hide($('#instructionCount')?.closest('article.card'));
+  // Ruangan lama Arahan Diterima.
+  hide($('#instructionList')?.closest('section.panel'));
+  // Ruangan KRONOLOGI lama. Menu PMA akan membukanya di Carta Operasi apabila diperlukan.
+  const chronologyHeading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='KRONOLOGI');
+  hide(chronologyHeading?.closest('section.panel'));
+  // Sejarah Komunikasi lama. LOG KOMUNIKASI kekal melalui menu.
+  hide($('#historyList')?.closest('section.panel'));
+  // Notifikasi Pergerakan Mangsa sentiasa tertutup pada paparan awal.
+  hide($('#victimMovementPanel'));
 }
 
 // ===== FIX 102: ADU — MENU 3 TITIK SEPERTI SRC =====
