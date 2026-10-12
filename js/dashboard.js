@@ -2288,9 +2288,9 @@ function ensureAduStyles(){
 async function renderAduModule(){
  $('#aduPanel')?.remove(); if(!isAduSupervisor())return; ensureAduStyles();
  const p=document.createElement('section'); p.id='aduPanel'; p.className='panel';
- p.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>ADU — Pengurusan Mangsa</h2><p class="muted">Tag TRIAGE asal dikekalkan. Tag ADU semasa digunakan untuk status terkini.</p></div><button id="aduRefresh" class="ghost">MUAT SEMULA</button></div>
+ p.innerHTML=`<div class="section-head"><div><p class="eyebrow">AIR DISASTER UNIT</p><h2>ADU — Pengurusan Mangsa</h2><p class="muted">Tag TRIAGE asal dikekalkan. Tag ADU semasa digunakan untuk status terkini.</p></div><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end"><button id="aduToggleForm" type="button" class="ghost" aria-expanded="false">PAPAR BORANG</button><button id="aduRefresh" class="ghost">MUAT SEMULA</button></div></div>
  <div class="adu-metrics">${['Putih','Merah','Kuning','Hijau','Jumlah'].map(x=>`<div class="adu-metric"><small>${x.toUpperCase()}</small><strong id="adu${x}">0</strong></div>`).join('')}</div>
- <h3>Daftar Mangsa</h3><form id="aduVictimForm"><div class="adu-grid">
+ <div id="aduRegisterBox" hidden><h3>Daftar Mangsa</h3><form id="aduVictimForm"><div class="adu-grid">
  <label>No./ID Mangsa<input id="aduNo" required placeholder="Contoh: ADU-001"></label>
  <label>Nama Mangsa<input id="aduNama" placeholder="BELUM DIKENAL PASTI"></label>
  <label>No. KP / Pasport<input id="aduId"></label>
@@ -2298,11 +2298,11 @@ async function renderAduModule(){
  <label>Warganegara<input id="aduNegara"></label>
  <label>Tag TRIAGE Asal<select id="aduTriage">${aduOptions()}</select></label>
  <label>Tag ADU Semasa<select id="aduSemasa">${aduOptions()}</select></label>
- <label class="full">Catatan Penilaian<textarea id="aduCatatan"></textarea></label></div><button type="submit">DAFTAR MANGSA</button></form>
+ <label class="full">Catatan Penilaian<textarea id="aduCatatan"></textarea></label></div><button type="submit">DAFTAR MANGSA</button></form></div>
  <p id="aduStatus" class="status"></p><h3>Senarai Mangsa Aktif ADU</h3><div id="aduList"></div>
  <div class="adu-transfer"><h3>Rekod Keluar ADU</h3><div id="aduTransferList"><p class="muted">Tiada rekod pemindahan.</p></div></div>`;
  document.querySelector('main').appendChild(p);
- $('#aduRefresh').onclick=loadAduData; $('#aduVictimForm').onsubmit=registerAduVictim; await loadAduData();
+ $('#aduRefresh').onclick=loadAduData; $('#aduVictimForm').onsubmit=registerAduVictim; const toggle=$('#aduToggleForm'),registerBox=$('#aduRegisterBox'); if(toggle&&registerBox){registerBox.hidden=true;toggle.textContent='PAPAR BORANG';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{const show=registerBox.hidden;registerBox.hidden=!show;toggle.textContent=show?'SEMBUNYI BORANG':'PAPAR BORANG';toggle.setAttribute('aria-expanded',show?'true':'false');if(show)registerBox.scrollIntoView({behavior:'smooth',block:'nearest'});};} await loadAduData();
 }
 
 async function loadAduData(){
