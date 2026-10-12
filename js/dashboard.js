@@ -805,6 +805,7 @@ async function loadAssignment() {
   setupTriageTopMenu();
   setupSrcTopMenu();
   setupAduTopMenu();
+  setupFfrcTopMenu();
 }
 
 
@@ -3054,6 +3055,92 @@ function setupSrcTopMenu(){
   }
   const victim=$('#srcPanel');if(victim&&!victim.dataset.menuManaged){victim.dataset.menuManaged='1';victim.hidden=true;victim.style.setProperty('display','none','important');}
   const movement=$('#victimMovementPanel');if(movement){movement.hidden=true;movement.style.setProperty('display','none','important');}
+}
+
+
+// ===== FIX 105: FFRC — MENU 3 TITIK =====
+function getFfrcChartPanel(){
+  const heading=[...document.querySelectorAll('h2')].find(x=>x.textContent.trim().toUpperCase()==='CARTA OPERASI');
+  return heading?.closest('section')||null;
+}
+function closeFfrcMenuViews(){
+  const host=$('#ffrcChartContent');if(host){host.hidden=true;host.style.setProperty('display','none','important');}
+  const registration=$('#ffrhPanel');if(registration){registration.hidden=true;registration.style.setProperty('display','none','important');}
+  const chart=getFfrcChartPanel();chart?.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='');
+}
+async function loadFfrcChronology(){
+  const box=$('#ffrcChartBody');if(!box)return;
+  const q=await supabase.from('ecor_komunikasi').select(`id,jenis,tajuk,kandungan,status,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod,nama),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod,nama)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const id=assignment.tempat_tugas_id;
+  const rows=(q.data||[]).filter(x=>x.dari_tempat_tugas_id===id||x.kepada_tempat_tugas_id===id);
+  const body=rows.map((x,i)=>{const d=x.created_at?new Date(x.created_at):null;return `<tr>${icpTd(i+1)}${icpTd(esc(d?d.toLocaleDateString('ms-MY'):'-'))}${icpTd(esc(d?d.toLocaleTimeString('ms-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'-'))}${icpTd(`<strong>${esc(x.tajuk||'-')}</strong>`)}${icpTd(esc(x.kandungan||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join('');
+  box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],body,'900px');
+}
+async function loadFfrcSrcVictims(){
+  const box=$('#ffrcChartBody');if(!box)return;
+  const q=await supabase.from('ecor_src_mangsa').select('*').eq('operasi_id',assignment.operasi_id).in('status_lokasi',['DALAM_SRC','MENUNGGU_PMA']).order('masa_tiba_src',{ascending:false});
+  if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return;}
+  const rows=q.data||[];
+  const body=rows.map((m,i)=>`<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(m.no_mangsa||'-')}</strong>`)}${icpTd(esc(m.nama_mangsa||'BELUM DIKENAL PASTI'))}${icpTd(esc(m.jantina||'BELUM DIKENALPASTI'))}${icpTd(esc(m.tag_src_semasa||m.tag_masuk_src||'-'))}${icpTd(esc(m.masa_tiba_src?fmt(m.masa_tiba_src):'-'))}${icpTd(esc(String(m.status_lokasi||'-').replaceAll('_',' ')))}${icpTd(esc(m.catatan||'-'))}</tr>`).join('');
+  box.innerHTML=icpTable(['BIL','ID MANGSA','NAMA','JANTINA','TAG SRC','MASA TIBA SRC','STATUS','CATATAN'],body,'1050px');
+}
+async function showFfrcMenuView(kind){
+  if(dutyCode()!=='FFRC')return;
+  const chart=getFfrcChartPanel();if(!chart)return;
+  closeFfrcMenuViews();chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');
+  if(kind==='WARIS'){
+    const registration=$('#ffrhPanel');
+    if(registration){registration.hidden=false;registration.style.removeProperty('display');chart.appendChild(registration);await loadFfrhData();registration.scrollIntoView({behavior:'smooth',block:'start'});}return;
+  }
+  let host=$('#ffrcChartContent');if(!host){host=document.createElement('div');host.id='ffrcChartContent';host.style.marginTop='18px';chart.appendChild(host);}
+  host.hidden=false;host.style.removeProperty('display');
+  const isSrc=kind==='SRC';
+  host.innerHTML=`<div class="section-head"><div><p class="eyebrow">FAMILY / FRIENDS RECEPTION CENTRE</p><h2>${isSrc?'Mangsa di SRC':'Kronologi FFRC'}</h2><p class="muted">${isSrc?'Senarai mangsa yang sedang berada di SRC untuk rujukan pendaftaran waris.':'Komunikasi yang melibatkan FFRC bagi operasi semasa.'}</p></div><div class="adu-actions"><button id="ffrcChartRefresh" class="ghost">MUAT SEMULA</button><button id="ffrcChartClose" class="ghost">TUTUP</button></div></div><div id="ffrcChartBody"><p class="muted">Memuatkan...</p></div>`;
+  $('#ffrcChartClose').onclick=closeFfrcMenuViews;
+  $('#ffrcChartRefresh').onclick=isSrc?loadFfrcSrcVictims:loadFfrcChronology;
+  if(isSrc)await loadFfrcSrcVictims();else await loadFfrcChronology();
+  chart.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function setupFfrcTopMenu(){
+  const header=document.querySelector('header.top');if(!header||dutyCode()!=='FFRC')return;
+  let wrap=$('#ffrcTopMenu');
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='ffrcTopMenu';wrap.className='cor-top-menu';
+    wrap.innerHTML=`<button id="ffrcTopMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu FFRC" aria-expanded="false">⋮</button>
+      <div id="ffrcTopMenuDropdown" class="cor-menu-dropdown" hidden>
+        <div class="cor-menu-parent" id="ffrcInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="ffrcInboxSubmenu" hidden>
+            <button type="button" data-ffrc-menu="inbox-report">LAPORAN</button>
+            <button type="button" data-ffrc-menu="inbox-instruction">ARAHAN</button>
+          </div>
+        </div>
+        <button type="button" data-ffrc-menu="chronology">KRONOLOGI</button>
+        <button type="button" data-ffrc-menu="registration">PENDAFTARAN WARIS</button>
+        <button type="button" data-ffrc-menu="src-victims">MANGSA DI SRC</button>
+        <button type="button" data-ffrc-menu="communication-log">LOG KOMUNIKASI</button>
+      </div>`;
+    header.insertBefore(wrap,header.firstChild);
+  }
+  const toggle=$('#ffrcTopMenuToggle'),drop=$('#ffrcTopMenuDropdown'),inboxMenu=$('#ffrcInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#ffrcInboxSubmenu');if(!toggle||!drop)return;
+  const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxBtn?.setAttribute('aria-expanded','false')};
+  const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxBtn?.setAttribute('aria-expanded','true')};
+  const close=()=>{drop.hidden=true;toggle.setAttribute('aria-expanded','false');closeInbox()};
+  if(toggle.dataset.bound!=='1'){
+    toggle.dataset.bound='1';toggle.onclick=e=>{e.stopPropagation();drop.hidden?(drop.hidden=false,toggle.setAttribute('aria-expanded','true')):close()};
+    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
+    drop.addEventListener('click',async e=>{const b=e.target.closest('[data-ffrc-menu]');if(!b)return;const a=b.dataset.ffrcMenu;close();
+      if(a==='inbox-report')await openCorInbox('LAPORAN');
+      if(a==='inbox-instruction')await openCorInbox('ARAHAN');
+      if(a==='chronology')await showFfrcMenuView('KRONOLOGI');
+      if(a==='registration')await showFfrcMenuView('WARIS');
+      if(a==='src-victims')await showFfrcMenuView('SRC');
+      if(a==='communication-log'){closeFfrcMenuViews();await openCorCommunicationLog();}
+    });
+    document.addEventListener('click',e=>{if(!wrap.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  }
+  const registration=$('#ffrhPanel');if(registration&&!registration.dataset.menuManaged){registration.dataset.menuManaged='1';registration.hidden=true;registration.style.setProperty('display','none','important');}
 }
 
 // ===== FIX 102: ADU — MENU 3 TITIK SEPERTI SRC =====
