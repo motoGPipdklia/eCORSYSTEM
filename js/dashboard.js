@@ -203,6 +203,8 @@ async function showCorIcpData(kind){
   if(!['COR','ACCC'].includes(currentCode)) return;
   const readOnly=currentCode==='ACCC';
   const chartPanel=getCorChartPanel(); if(!chartPanel)return; closeOtherCorChartViews();
+  const movementPanel=$('#victimMovementPanel'); if(movementPanel){movementPanel.hidden=true;movementPanel.style.setProperty('display','none','important');}
+  const victimBtn=$('#corVictimToggle'); if(victimBtn){victimBtn.textContent='MANGSA KESELURUHAN';victimBtn.setAttribute('aria-expanded','false');}
   const placeholder=chartPanel.querySelector(':scope > p.muted'); if(placeholder)placeholder.style.display='none';
   let panel=$('#corIcpDataPanel'); if(!panel){panel=document.createElement('div');panel.id='corIcpDataPanel';panel.style.marginTop='18px';chartPanel.appendChild(panel);}
   panel.hidden=false;panel.style.removeProperty('display');
@@ -217,6 +219,8 @@ async function showCorIcpData(kind){
   await loadCorIcpData(kind); chartPanel.scrollIntoView({behavior:'smooth',block:'start'});
 }
 async function loadCorIcpData(kind){
+  const currentCode=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
+  const readOnly=currentCode==='ACCC';
   const box=$('#corIcpDataBody'),status=$('#corIcpDataStatus');if(!box)return;box.innerHTML='<p class="muted">Memuatkan data...</p>';if(status)status.textContent='';
   if(kind==='RESPONDER'){
     const q=await supabase.from('ecor_icp_responder').select('*').eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});
@@ -1066,11 +1070,15 @@ async function loadCommunication() {
 
   // KRONOLOGI: hanya LAPORAN / ARAHAN yang DITERIMA oleh tempat tugas semasa.
   // Susunan paling awal di atas supaya perjalanan komunikasi mudah diikuti.
+  const currentCodeForChronology=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
   const receivedChronology = rows
-    .filter(x =>
-      x.kepada_tempat_tugas_id === assignment.tempat_tugas_id &&
-      (x.jenis === 'LAPORAN' || x.jenis === 'ARAHAN' || x.jenis === 'MAKLUM_BALAS')
-    )
+    .filter(x => {
+      const valid=(x.jenis === 'LAPORAN' || x.jenis === 'ARAHAN' || x.jenis === 'MAKLUM_BALAS');
+      if(!valid) return false;
+      // ACCC menggunakan pandangan KRONOLOGI yang sama seperti COR.
+      if(currentCodeForChronology==='ACCC') return String(x.kepada?.kod||'').trim().toUpperCase()==='COR';
+      return x.kepada_tempat_tugas_id === assignment.tempat_tugas_id;
+    })
     .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
 
   renderChronology(receivedChronology);
@@ -1142,6 +1150,7 @@ function renderChronology(items) {
 
     const openPanel = () => {
       // Satu paparan sahaja di ruang Carta Operasi pada satu masa.
+      const movementPanel=$('#victimMovementPanel');if(movementPanel){movementPanel.hidden=true;movementPanel.style.setProperty('display','none','important');}
       const icpDataPanel=$('#corIcpDataPanel');
       if(icpDataPanel){icpDataPanel.hidden=true;icpDataPanel.style.setProperty('display','none','important');}
       const victimPanel = $('#corAduPanel');
@@ -1710,7 +1719,7 @@ function setupAcccTopMenu(){
     if(a==='responder')await showCorIcpData('RESPONDER');
     if(a==='flight')await showCorIcpData('PENERBANGAN');
     if(a==='incident-summary')await showCorIcpData('RINGKASAN');
-    if(a==='movement'){const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}}
+    if(a==='movement'){closeOtherCorChartViews();const d=$('#corIcpDataPanel');if(d){d.hidden=true;d.style.setProperty('display','none','important');}const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();p.scrollIntoView({behavior:'smooth',block:'start'});}}
     if(a==='communication-log')await openCorCommunicationLog();
     if(a==='inbox-report')await openCorInbox('LAPORAN');
   });
@@ -2144,10 +2153,10 @@ async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
  const p=document.createElement('section');p.id='victimMovementPanel';p.className='panel';if(['COR','TEC','ACCC'].includes(code))p.hidden=true;
- const movementActions=['COR','TEC'].includes(code)?`<div class="adu-actions"><button id="movementRefresh" class="ghost">MUAT SEMULA</button><button id="movementClose" class="ghost">TUTUP</button></div>`:`<button id="movementRefresh" class="ghost">MUAT SEMULA</button>`;
- const movementDesc=code==='TEC'?'Paparan TEC hanya melibatkan pergerakan mangsa yang masuk ke atau keluar dari SRC dan PMA.':'Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja. COR boleh melihat semua pergerakan mangsa.'; p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">${movementDesc}</p></div>${movementActions}</div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
+ const movementActions=['COR','TEC','ACCC'].includes(code)?`<div class="adu-actions"><button id="movementRefresh" class="ghost">MUAT SEMULA</button><button id="movementClose" class="ghost">TUTUP</button></div>`:`<button id="movementRefresh" class="ghost">MUAT SEMULA</button>`;
+ const movementDesc=code==='TEC'?'Paparan TEC hanya melibatkan pergerakan mangsa yang masuk ke atau keluar dari SRC dan PMA.':(['COR','ACCC'].includes(code)?'Paparan semua pergerakan mangsa bagi operasi semasa.':'Pergerakan masuk dan keluar yang melibatkan tempat tugas anda sahaja.'); p.innerHTML=`<div class="section-head"><div><p class="eyebrow">PERGERAKAN MANGSA</p><h2>Notifikasi Pergerakan Mangsa</h2><p class="muted">${movementDesc}</p></div>${movementActions}</div><div id="movementList"><p class="muted">Memuatkan pergerakan mangsa...</p></div>`;
  const ownPanel=$(`#${code.toLowerCase()}Panel`); if(ownPanel)ownPanel.insertAdjacentElement('beforebegin',p);else document.querySelector('main').appendChild(p); $('#movementRefresh').onclick=loadVictimMovements;
- if(['COR','TEC'].includes(code)&&$('#movementClose'))$('#movementClose').onclick=()=>{p.hidden=true;};
+ if(['COR','TEC','ACCC'].includes(code)&&$('#movementClose'))$('#movementClose').onclick=()=>{p.hidden=true;};
  await loadVictimMovements();
 }
 async function loadVictimMovements(){
@@ -2156,7 +2165,7 @@ async function loadVictimMovements(){
  const box=$('#movementList');if(!box)return;if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
  const allRows=q.data||[];
  // FIX 038: setiap lokasi hanya melihat pergerakan MASUK / KELUAR lokasi sendiri. COR melihat semua.
- const rows=code==='COR'?allRows:code==='TEC'?allRows.filter(m=>['SRC','PMA'].includes(String(m.asal||'').trim().toUpperCase())||['SRC','PMA'].includes(String(m.destinasi||'').trim().toUpperCase())):allRows.filter(m=>String(m.asal||'').trim().toUpperCase()===code||String(m.destinasi||'').trim().toUpperCase()===code);
+ const rows=['COR','ACCC'].includes(code)?allRows:code==='TEC'?allRows.filter(m=>['SRC','PMA'].includes(String(m.asal||'').trim().toUpperCase())||['SRC','PMA'].includes(String(m.destinasi||'').trim().toUpperCase())):allRows.filter(m=>String(m.asal||'').trim().toUpperCase()===code||String(m.destinasi||'').trim().toUpperCase()===code);
  const notif=m=>String(m.status).toUpperCase()==='TIBA'?`MANGSA TELAH TIBA DI ${String(m.destinasi||'-').toUpperCase()}`:movementLabel(m.destinasi);
  box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1180px"><thead><tr><th>BIL</th><th>NOTIFIKASI</th><th>ID MANGSA</th><th>TAG</th><th>ASAL</th><th>DESTINASI</th><th>MASA BERTOLAK</th><th>MASA SAMPAI</th><th>CATATAN</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((m,i)=>`<tr><td>${i+1}</td><td><strong>${esc(notif(m))}</strong></td><td><b>${esc(m.no_mangsa)}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} ${esc(m.tag_semasa||'-')}</span></td><td>${esc(m.asal)}</td><td>${esc(m.destinasi_nama||m.destinasi)}</td><td>${esc(fmt(m.masa_bertolak))}</td><td>${m.masa_tiba?esc(fmt(m.masa_tiba)):'-'}</td><td>${esc(m.catatan||'-')}</td><td>${String(m.status).toUpperCase()==='TIBA'?'<span class="adu-status-active"><b>TIBA</b></span>':(m.destinasi===code?`<button data-confirm-move="${m.id}">SAHKAN TIBA DI ${esc(code)}</button>`:'<span class="muted">DALAM PERJALANAN</span>')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada rekod pergerakan mangsa.</p>';
  box.querySelectorAll('[data-confirm-move]').forEach(b=>b.onclick=()=>confirmVictimArrival(rows.find(x=>x.id===b.dataset.confirmMove)));
@@ -2375,6 +2384,7 @@ async function renderCorAduStatus(){
     btn.textContent='MANGSA KESELURUHAN';
     btn.setAttribute('aria-expanded','false');
     logoutBtn.insertAdjacentElement('beforebegin',btn);
+    if(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()==='ACCC') btn.style.setProperty('display','none','important');
   }
   setupCorTopMenu();
 
@@ -2408,6 +2418,7 @@ async function renderCorAduStatus(){
     if(b){b.setAttribute('aria-expanded','false'); b.textContent='MANGSA KESELURUHAN';}
   };
   const openPanel=async()=>{
+    const movementPanel=$('#victimMovementPanel');if(movementPanel){movementPanel.hidden=true;movementPanel.style.setProperty('display','none','important');}
     const icpDataPanel=$('#corIcpDataPanel');
     if(icpDataPanel){icpDataPanel.hidden=true;icpDataPanel.style.setProperty('display','none','important');}
     const chronologyPanel=$('#chronologyPanel');
