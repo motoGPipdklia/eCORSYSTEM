@@ -851,7 +851,52 @@ async function loadAssignment() {
   setupReportOnlySubmoduleTopMenu();
   setupAttendanceModule();
   applyPmaCleanLayout();
+  startEcorAutoRefresh();
 }
+
+// ===== FIX 132: AUTO REFRESH SEMUA MODUL / SUBMODUL SETIAP 2 MINIT =====
+const ECOR_AUTO_REFRESH_MS = 120000;
+let ecorAutoRefreshTimer = null;
+let ecorAutoRefreshRunning = false;
+
+function ecorUserIsEditing(){
+  const a=document.activeElement;
+  if(a && ['INPUT','TEXTAREA','SELECT'].includes(a.tagName)) return true;
+  if(document.querySelector('#icpFormModal[style*="display: block"], #corCommandModal:not([hidden]), #reportPanel:not([hidden])')) return true;
+  return false;
+}
+async function refreshEcorCurrentModule(){
+  if(!assignment || !session || ecorAutoRefreshRunning || ecorUserIsEditing()) return;
+  ecorAutoRefreshRunning=true;
+  try{
+    await loadCommunication();
+    const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();
+    if(code==='TRIAGE') await loadTriageData();
+    if(code==='ADU') await loadAduData();
+    if(code==='SRC') await loadSrcData();
+    if(code==='CRC') await loadCrcData();
+    if(code==='FFRC') await loadFfrhData();
+    if(code==='FFHA') await loadFfhaData();
+    if(code==='PMA') await loadPmaData();
+    if(['VIP','MEDIA'].includes(code)) await loadVipMediaData();
+    if(code==='BHA') await loadBhaInbox();
+    if(code==='ICP') await loadIcpAdministration();
+    if($('#victimMovementPanel') && !$('#victimMovementPanel').hidden) await loadVictimMovements();
+    const att=$('#attendancePanel');
+    if(att && !att.hidden) await showAttendancePanel(code==='COR');
+    const corData=$('#corIcpDataPanel');
+    if(corData && !corData.hidden && corData.dataset.kind) await loadCorIcpData(corData.dataset.kind);
+    const icpModal=$('#icpTableModal');
+    if(icpModal && icpModal.style.display==='block' && icpModal.dataset.kind) await loadIcpTable(icpModal.dataset.kind);
+    console.debug('[eCOR] Auto refresh selesai',new Date().toLocaleTimeString('ms-MY'));
+  }catch(err){console.warn('[eCOR] Auto refresh gagal:',err);}
+  finally{ecorAutoRefreshRunning=false;}
+}
+function startEcorAutoRefresh(){
+  if(ecorAutoRefreshTimer) clearInterval(ecorAutoRefreshTimer);
+  ecorAutoRefreshTimer=setInterval(refreshEcorCurrentModule,ECOR_AUTO_REFRESH_MS);
+}
+window.addEventListener('beforeunload',()=>{if(ecorAutoRefreshTimer)clearInterval(ecorAutoRefreshTimer);});
 
 
 // ===== FIX 066: COR — HANTAR ARAHAN KE SUBMODUL =====
