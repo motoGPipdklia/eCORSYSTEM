@@ -2560,7 +2560,7 @@ async function loadCorAduStatus(){
 
   const [triageQ,aduQ,movementQ]=await Promise.all([
     supabase.from('ecor_triage_mangsa')
-      .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,masa_keluar_triage,catatan_pemindahan')
+      .select('id,no_mangsa,nama_mangsa,jantina,kategori_mangsa,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,masa_keluar_triage,catatan_pemindahan')
       .eq('operasi_id',assignment.operasi_id),
     supabase.from('ecor_adu_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
@@ -2651,9 +2651,17 @@ async function loadCorAduStatus(){
     const movementName=String(mv?.nama_mangsa||'').trim();
     return movementName||'BELUM DIKENAL PASTI';
   };
+  // FIX 121: Paparkan kategori CREW / PENUMPANG pada semua butiran CARTA MANGSA COR.
+  // Rekod ADU tidak menyimpan kategori_mangsa, jadi ambil kategori asal daripada rekod TRIAGE menggunakan ID mangsa.
+  const triageCategoryByVictim=new Map((triageQ.data||[]).map(x=>[normKey(x),String(x.kategori_mangsa||'PENUMPANG').trim().toUpperCase()]));
+  const corVictimCategory=m=>{
+    const direct=String(m?.kategori_mangsa||'').trim().toUpperCase();
+    if(direct==='CREW'||direct==='PENUMPANG')return direct;
+    return triageCategoryByVictim.get(normKey(m))||'PENUMPANG';
+  };
   const detailHtml=(filter)=>{
     const list=detailRows(filter);
-    return `<div id="corSummaryDetailModal" role="dialog" aria-modal="true" aria-label="Butiran Mangsa" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:22px"><div class="adu-summary-detail" style="width:min(1280px,96vw);max-height:88vh;background:#071722;border:1px solid rgba(148,163,184,.35);border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden;display:flex;flex-direction:column"><div class="section-head" style="padding:18px 20px;flex:0 0 auto;border-bottom:1px solid rgba(148,163,184,.2)"><div><p class="eyebrow">BUTIRAN MANGSA</p><h3>${esc(detailTitle[filter]||filter)}</h3><p class="muted">Jumlah: ${list.length}</p></div><button type="button" id="corSummaryDetailClose" class="ghost">TUTUP ×</button></div><div style="overflow:auto;flex:1 1 auto">${list.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1050px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA MANGSA</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${list.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><b>${esc(m.no_mangsa||'-')}</b></td><td><b>${esc(corVictimName(m))}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} <span>${esc(m.tag_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-destination">${esc(statusDestinasi(m))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:20px">Tiada rekod mangsa dalam kategori ini.</p>'}</div></div></div>`;
+    return `<div id="corSummaryDetailModal" role="dialog" aria-modal="true" aria-label="Butiran Mangsa" style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:22px"><div class="adu-summary-detail" style="width:min(1280px,96vw);max-height:88vh;background:#071722;border:1px solid rgba(148,163,184,.35);border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden;display:flex;flex-direction:column"><div class="section-head" style="padding:18px 20px;flex:0 0 auto;border-bottom:1px solid rgba(148,163,184,.2)"><div><p class="eyebrow">BUTIRAN MANGSA</p><h3>${esc(detailTitle[filter]||filter)}</h3><p class="muted">Jumlah: ${list.length}</p></div><button type="button" id="corSummaryDetailClose" class="ghost">TUTUP ×</button></div><div style="overflow:auto;flex:1 1 auto">${list.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1200px"><thead><tr><th>BIL</th><th>ID MANGSA</th><th>NAMA MANGSA</th><th>CREW / PENUMPANG</th><th>JENIS WARNA KAD</th><th>JANTINA</th><th>STATUS / DESTINASI</th><th>CATATAN</th></tr></thead><tbody>${list.map((m,i)=>`<tr><td class="adu-bil">${String(i+1).padStart(2,'0')}</td><td><b>${esc(m.no_mangsa||'-')}</b></td><td><b>${esc(corVictimName(m))}</b></td><td><b>${esc(corVictimCategory(m))}</b></td><td><span class="adu-tag">${aduDot(m.tag_semasa)} <span>${esc(m.tag_semasa||'-')}</span></span></td><td><span class="adu-gender">${esc(normGender(m.jantina))}</span></td><td class="adu-destination">${esc(statusDestinasi(m))}</td><td class="adu-note">${esc(m.catatan_pemindahan||m.catatan||'-')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="padding:20px">Tiada rekod mangsa dalam kategori ini.</p>'}</div></div></div>`;
   };
   const tile=(n,label,value,filter,cls='')=>`<button type="button" class="adu-summary-item cor-summary-click ${cls}" data-cor-filter="${esc(filter)}" style="text-align:left;cursor:pointer;border:0;background:transparent;color:inherit;width:100%"><small>${label}</small><strong>${value}</strong></button>`;
   if(summary){
