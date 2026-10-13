@@ -2369,8 +2369,11 @@ const isFfrcSupervisor=()=>isDutySupervisor('FFRC');
 const isFfhaSupervisor=()=>isDutySupervisor('FFHA');
 const isPmaSupervisor=()=>isDutySupervisor('PMA');
 
+let ffrhEditingId=null;
+
 async function renderFfrhModule(){
  $('#ffrhPanel')?.remove(); if(!isFfrcSupervisor())return; ensureAduStyles();
+ ffrhEditingId=null;
  const p=document.createElement('section');p.id='ffrhPanel';p.className='panel';p.innerHTML=`<div class="section-head"><div><p class="eyebrow">FAMILY / FRIENDS RECEPTION CENTRE</p><h2>FFRC — Pendaftaran Waris Mangsa</h2><p class="muted">Daftar maklumat waris dan nama mangsa. ID mangsa tidak diperlukan dalam borang FFRC.</p></div><button id="ffrhRefresh" class="ghost">MUAT SEMULA</button></div>
  <form id="ffrhForm"><div class="adu-grid">
  <label>Nama Waris<input id="ffrhName" required placeholder="Nama penuh waris"></label>
@@ -2379,23 +2382,88 @@ async function renderFfrhModule(){
  <label>No. Telefon<input id="ffrhPhone" required></label>
  <label>Hubungan Dengan Mangsa<input id="ffrhRelation" required placeholder="Contoh: Isteri / Suami / Anak"></label>
  <label>Status Pengesahan<select id="ffrhVerifyStatus" required><option value="MENUNGGU_PENGESAHAN">MENUNGGU PENGESAHAN</option><option value="DISAHKAN">DISAHKAN</option><option value="TIDAK_DISAHKAN">TIDAK DISAHKAN</option></select></label>
- <label class="full">Catatan<textarea id="ffrhNote"></textarea></label></div><button type="submit">DAFTAR WARIS</button></form><p id="ffrhStatus" class="status"></p><h3>Senarai Pendaftaran Waris</h3><div id="ffrhList"></div>`;
- document.querySelector('main').appendChild(p);$('#ffrhRefresh').onclick=loadFfrhData;$('#ffrhForm').onsubmit=registerWaris;await loadFfrhData();
+ <label class="full">Catatan<textarea id="ffrhNote"></textarea></label></div>
+ <div class="adu-actions"><button id="ffrhSubmit" type="submit">DAFTAR WARIS</button><button id="ffrhCancelEdit" type="button" class="ghost" hidden>BATAL EDIT</button></div>
+ </form><p id="ffrhStatus" class="status"></p><h3>Senarai Pendaftaran Waris</h3><div id="ffrhList"></div>`;
+ document.querySelector('main').appendChild(p);
+ $('#ffrhRefresh').onclick=loadFfrhData;
+ $('#ffrhForm').onsubmit=saveWaris;
+ $('#ffrhCancelEdit').onclick=cancelEditWaris;
+ await loadFfrhData();
 }
-async function registerWaris(e){
- e.preventDefault(); const status=$('#ffrhVerifyStatus').value;
- const payload={operasi_id:assignment.operasi_id,nama_waris:$('#ffrhName').value.trim(),nama_mangsa:$('#ffrhVictimName').value.trim(),no_pengenalan:$('#ffrhId').value.trim(),no_telefon:$('#ffrhPhone').value.trim(),hubungan:$('#ffrhRelation').value.trim(),catatan:$('#ffrhNote').value.trim()||null,status,disahkan:status==='DISAHKAN',masa_daftar:new Date().toISOString(),masa_disahkan:status==='DISAHKAN'?new Date().toISOString():null,didaftarkan_oleh:session.user.id,disahkan_oleh:status==='DISAHKAN'?session.user.id:null};
- const q=await supabase.from('ecor_waris').insert(payload);if(q.error){$('#ffrhStatus').textContent=q.error.message;return}e.target.reset();$('#ffrhStatus').textContent='Pendaftaran waris berjaya disimpan.';await loadFfrhData();
+
+function resetWarisForm(){
+ ffrhEditingId=null;
+ const form=$('#ffrhForm');if(form)form.reset();
+ if($('#ffrhSubmit'))$('#ffrhSubmit').textContent='DAFTAR WARIS';
+ if($('#ffrhCancelEdit'))$('#ffrhCancelEdit').hidden=true;
 }
+
+function startEditWaris(w){
+ if(!w)return;
+ ffrhEditingId=w.id;
+ $('#ffrhName').value=w.nama_waris||'';
+ $('#ffrhVictimName').value=w.nama_mangsa||'';
+ $('#ffrhId').value=w.no_pengenalan||'';
+ $('#ffrhPhone').value=w.no_telefon||'';
+ $('#ffrhRelation').value=w.hubungan||'';
+ // Status lokasi/pergerakan tidak boleh direset ketika edit.
+ // Hanya rekod yang masih di peringkat pengesahan menggunakan pilihan status borang.
+ $('#ffrhVerifyStatus').value=['MENUNGGU_PENGESAHAN','DISAHKAN','TIDAK_DISAHKAN'].includes(w.status)?w.status:'DISAHKAN';
+ $('#ffrhNote').value=w.catatan||'';
+ $('#ffrhSubmit').textContent='SIMPAN PERUBAHAN';
+ $('#ffrhCancelEdit').hidden=false;
+ $('#ffrhStatus').textContent='Mod EDIT: kemas kini maklumat dan tekan SIMPAN PERUBAHAN.';
+ $('#ffrhForm').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function cancelEditWaris(){
+ resetWarisForm();
+ $('#ffrhStatus').textContent='Edit dibatalkan.';
+}
+
+async function saveWaris(e){
+ e.preventDefault();
+ const selectedStatus=$('#ffrhVerifyStatus').value;
+ const base={
+  nama_waris:$('#ffrhName').value.trim(),
+  nama_mangsa:$('#ffrhVictimName').value.trim(),
+  no_pengenalan:$('#ffrhId').value.trim(),
+  no_telefon:$('#ffrhPhone').value.trim(),
+  hubungan:$('#ffrhRelation').value.trim(),
+  catatan:$('#ffrhNote').value.trim()||null
+ };
+ if(!base.nama_waris||!base.nama_mangsa||!base.no_pengenalan||!base.no_telefon||!base.hubungan){
+  $('#ffrhStatus').textContent='Sila lengkapkan semua maklumat wajib.';return;
+ }
+
+ if(ffrhEditingId){
+  // FIX 137: Update maklumat sahaja. Status/lokasi perjalanan sedia ada dikekalkan.
+  const q=await supabase.from('ecor_waris').update(base).eq('id',ffrhEditingId).eq('operasi_id',assignment.operasi_id).select('id').maybeSingle();
+  if(q.error||!q.data){$('#ffrhStatus').textContent=q.error?.message||'Rekod waris tidak dapat dikemas kini.';return}
+  resetWarisForm();$('#ffrhStatus').textContent='Maklumat waris berjaya dikemas kini.';await loadFfrhData();return;
+ }
+
+ const payload={...base,operasi_id:assignment.operasi_id,status:selectedStatus,disahkan:selectedStatus==='DISAHKAN',masa_daftar:new Date().toISOString(),masa_disahkan:selectedStatus==='DISAHKAN'?new Date().toISOString():null,didaftarkan_oleh:session.user.id,disahkan_oleh:selectedStatus==='DISAHKAN'?session.user.id:null};
+ const q=await supabase.from('ecor_waris').insert(payload);
+ if(q.error){$('#ffrhStatus').textContent=q.error.message;return}
+ resetWarisForm();$('#ffrhStatus').textContent='Pendaftaran waris berjaya disimpan.';await loadFfrhData();
+}
+
 async function loadFfrhData(){
- if(!isFfrcSupervisor())return;const q=await supabase.from('ecor_waris').select('*').eq('operasi_id',assignment.operasi_id).order('masa_daftar',{ascending:false});const box=$('#ffrhList');if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const rows=q.data||[];
+ if(!isFfrcSupervisor())return;
+ const q=await supabase.from('ecor_waris').select('*').eq('operasi_id',assignment.operasi_id).order('masa_daftar',{ascending:false});
+ const box=$('#ffrhList');if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}
+ const rows=q.data||[];
  const verifyLabel=w=>w.status==='MENUNGGU_PENGESAHAN'?'MENUNGGU PENGESAHAN':w.status==='TIDAK_DISAHKAN'?'TIDAK DISAHKAN':'DISAHKAN';
  const locationLabel=w=>({DISAHKAN:'FFRC',DALAM_PERJALANAN_FFHA:'DALAM PERJALANAN KE FFHA',FFHA:'FFHA',DALAM_PERJALANAN_PMA:'DALAM PERJALANAN KE PMA',PMA:'PMA',DIPERTEMUKAN:'DIPERTEMUKAN DENGAN MANGSA'}[w.status]||'-');
- box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1400px"><thead><tr><th>BIL</th><th>NAMA WARIS</th><th>NAMA MANGSA</th><th>NO. KP / PASPORT WARIS</th><th>NO. TELEFON</th><th>HUBUNGAN</th><th>CATATAN</th><th>STATUS PENGESAHAN</th><th>STATUS / LOKASI</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((w,i)=>`<tr><td>${i+1}</td><td><b>${esc(w.nama_waris)}</b></td><td>${esc(w.nama_mangsa||'-')}</td><td>${esc(w.no_pengenalan)}</td><td>${esc(w.no_telefon||'-')}</td><td>${esc(w.hubungan)}</td><td>${esc(w.catatan||'-')}</td><td class="adu-destination">${esc(verifyLabel(w))}</td><td class="adu-destination">${esc(locationLabel(w))}</td><td>${w.status==='MENUNGGU_PENGESAHAN'?`<button data-verify="${w.id}">SAHKAN WARIS</button> <button class="ghost" data-reject="${w.id}">TIDAK DISAHKAN</button>`:w.status==='DISAHKAN'?`<button data-send-ffha="${w.id}">HANTAR KE FFHA</button>`:`<span class="muted">${esc(locationLabel(w))}</span>`}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada waris didaftarkan.</p>';
+ box.innerHTML=rows.length?`<div class="adu-wrap"><table class="adu-table" style="min-width:1500px"><thead><tr><th>BIL</th><th>NAMA WARIS</th><th>NAMA MANGSA</th><th>NO. KP / PASPORT WARIS</th><th>NO. TELEFON</th><th>HUBUNGAN</th><th>CATATAN</th><th>STATUS PENGESAHAN</th><th>STATUS / LOKASI</th><th>TINDAKAN</th></tr></thead><tbody>${rows.map((w,i)=>`<tr><td>${i+1}</td><td><b>${esc(w.nama_waris)}</b></td><td>${esc(w.nama_mangsa||'-')}</td><td>${esc(w.no_pengenalan)}</td><td>${esc(w.no_telefon||'-')}</td><td>${esc(w.hubungan)}</td><td>${esc(w.catatan||'-')}</td><td class="adu-destination">${esc(verifyLabel(w))}</td><td class="adu-destination">${esc(locationLabel(w))}</td><td><div class="adu-actions"><button type="button" class="ghost" data-edit-waris="${w.id}">EDIT</button>${w.status==='MENUNGGU_PENGESAHAN'?`<button type="button" data-verify="${w.id}">SAHKAN WARIS</button><button type="button" class="ghost" data-reject="${w.id}">TIDAK DISAHKAN</button>`:w.status==='DISAHKAN'?`<button type="button" data-send-ffha="${w.id}">HANTAR KE FFHA</button>`:`<span class="muted">${esc(locationLabel(w))}</span>`}</div></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Tiada waris didaftarkan.</p>';
+ box.querySelectorAll('[data-edit-waris]').forEach(b=>b.onclick=()=>startEditWaris(rows.find(x=>x.id===b.dataset.editWaris)));
  box.querySelectorAll('[data-verify]').forEach(b=>b.onclick=()=>verifyWaris(rows.find(x=>x.id===b.dataset.verify),true));
  box.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>verifyWaris(rows.find(x=>x.id===b.dataset.reject),false));
  box.querySelectorAll('[data-send-ffha]').forEach(b=>b.onclick=()=>sendWarisToFfha(rows.find(x=>x.id===b.dataset.sendFfha)));
 }
+
 async function verifyWaris(w,approved){
  if(!w)return;const label=approved?'DISAHKAN':'TIDAK DISAHKAN';if(!confirm(`Tetapkan status ${w.nama_waris} sebagai ${label}?`))return;const now=new Date().toISOString();const payload=approved?{status:'DISAHKAN',disahkan:true,masa_disahkan:now,disahkan_oleh:session.user.id}:{status:'TIDAK_DISAHKAN',disahkan:false,masa_disahkan:now,disahkan_oleh:session.user.id};const q=await supabase.from('ecor_waris').update(payload).eq('id',w.id).eq('status','MENUNGGU_PENGESAHAN').select('id').maybeSingle();if(q.error||!q.data){alert(q.error?.message||'Status pengesahan tidak dapat dikemas kini.');return}await loadFfrhData();
 }
