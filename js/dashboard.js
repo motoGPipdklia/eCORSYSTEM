@@ -2256,9 +2256,28 @@ async function forwardIcpReport(source, button) {
 const movementCodes=['TRIAGE','ADU','SRC','CRC','BHA','HOSPITAL','PMA','COR','TEC','ACCC'];
 const movementLabel=d=>({SRC:'MANGSA DALAM PERJALANAN KE SRC',CRC:'MANGSA DALAM PERJALANAN KE CRC',ADU:'MANGSA DALAM PERJALANAN KE ADU',HOSPITAL:'MANGSA DALAM PERJALANAN KE HOSPITAL',BHA:'MANGSA KE BHA',PMA:'MANGSA DALAM PERJALANAN KE PMA'})[String(d||'').toUpperCase()]||`MANGSA DALAM PERJALANAN KE ${String(d||'-').toUpperCase()}`;
 async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
- const payload={operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_crc_semasa||m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||m.tag_semasa||null,asal:String(asal).toUpperCase(),destinasi:String(destinasi).toUpperCase(),destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
- const q=await supabase.from('ecor_pergerakan_mangsa').insert(payload).select('id').single();
- if(q.error){alert(`Gagal merekod pergerakan mangsa: ${q.error.message}`);return null} return q.data;
+ const asalKod=String(asal||'').trim().toUpperCase(),destKod=String(destinasi||'').trim().toUpperCase(),noMangsa=String(m?.no_mangsa||'').trim();
+ // FIX 125: satu mangsa hanya boleh mempunyai satu perjalanan aktif. Jika percubaan
+ // terdahulu sudah berjaya mencipta perjalanan yang sama tetapi kemas kini modul asal
+ // gagal, gunakan semula perjalanan tersebut dan teruskan sinkronisasi status.
+ const existing=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',noMangsa).eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}).limit(1).maybeSingle();
+ if(existing.error){alert(`Gagal menyemak pergerakan aktif mangsa: ${existing.error.message}`);return null}
+ if(existing.data){
+   const same=String(existing.data.asal||'').trim().toUpperCase()===asalKod&&String(existing.data.destinasi||'').trim().toUpperCase()===destKod;
+   if(same)return existing.data;
+   alert(`${noMangsa} masih mempunyai pergerakan aktif ${existing.data.asal||'-'} → ${existing.data.destinasi||'-'}. Sahkan ketibaan atau selesaikan pergerakan tersebut dahulu.`);return null;
+ }
+ const payload={operasi_id:assignment.operasi_id,no_mangsa:noMangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_crc_semasa||m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||m.tag_semasa||null,asal:asalKod,destinasi:destKod,destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
+ const q=await supabase.from('ecor_pergerakan_mangsa').insert(payload).select('*').single();
+ if(q.error){
+   // Perlindungan race/klik berganda: semak semula rekod aktif yang mungkin baru tercipta.
+   if(String(q.error.code||'')==='23505'||String(q.error.message||'').includes('ecor_pergerakan_satu_aktif_idx')){
+     const retry=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',noMangsa).eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}).limit(1).maybeSingle();
+     if(!retry.error&&retry.data&&String(retry.data.asal||'').trim().toUpperCase()===asalKod&&String(retry.data.destinasi||'').trim().toUpperCase()===destKod)return retry.data;
+   }
+   alert(`Gagal merekod pergerakan mangsa: ${q.error.message}`);return null
+ }
+ return q.data;
 }
 async function renderVictimMovementPanel(){
  $('#victimMovementPanel')?.remove(); const code=String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase(); if(!movementCodes.includes(code))return; ensureAduStyles();
