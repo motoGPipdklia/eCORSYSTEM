@@ -2581,7 +2581,7 @@ async function renderCorAduStatus(){
 async function loadCorAduStatus(){
   if(!['COR','ACCC'].includes(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase())) return;
 
-  const [triageQ,aduQ,crcQ,movementQ]=await Promise.all([
+  const [triageQ,aduQ,crcQ,srcQ,movementQ]=await Promise.all([
     supabase.from('ecor_triage_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,kategori_mangsa,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,masa_keluar_triage,catatan_pemindahan')
       .eq('operasi_id',assignment.operasi_id),
@@ -2591,11 +2591,14 @@ async function loadCorAduStatus(){
     supabase.from('ecor_crc_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,tag_masuk_crc,tag_crc_semasa,catatan,status_lokasi,destinasi,masa_tiba_crc,masa_keluar_crc,catatan_pemindahan,status_dokumentasi,masa_dokumentasi_selesai')
       .eq('operasi_id',assignment.operasi_id),
+    supabase.from('ecor_src_mangsa')
+      .select('id,no_mangsa,status_lokasi,destinasi,masa_keluar_src,catatan_pemindahan')
+      .eq('operasi_id',assignment.operasi_id),
     supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).in('status',['DALAM_PERJALANAN','TIBA']).order('masa_bertolak',{ascending:false})
   ]);
 
   const box=$('#corAduTable'),summary=$('#corAduSummary'),status=$('#corAduStatus');
-  const err=triageQ.error||aduQ.error||crcQ.error||movementQ.error;
+  const err=triageQ.error||aduQ.error||crcQ.error||srcQ.error||movementQ.error;
   if(err){if(box)box.innerHTML=`<p class="status">${esc(err.message)}</p>`;if(status)status.textContent=err.message;return;}
 
   const normGender=v=>{const x=String(v||'').trim().toUpperCase();if(x==='LELAKI')return 'LELAKI';if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA';return 'BELUM DIKENALPASTI';};
@@ -2619,7 +2622,10 @@ async function loadCorAduStatus(){
 
   const movementByVictim=new Map();
   (movementQ.data||[]).forEach(x=>{const k=String(x.no_mangsa||'').trim().toUpperCase();if(k&&!movementByVictim.has(k))movementByVictim.set(k,x);});
+  const srcByVictim=new Map((srcQ.data||[]).map(x=>[normKey(x),x]));
   const statusDestinasi=m=>{
+    const src=srcByVictim.get(normKey(m));
+    if(String(src?.status_lokasi||'').trim().toUpperCase()==='AIRLINES') return 'TELAH DIURUSKAN OLEH PIHAK AIRLINES';
     const mv=movementByVictim.get(normKey(m)); if(mv){if(mv.dipertemukan_dengan_waris===true)return 'DIPERTEMUKAN DENGAN WARIS';return String(mv.status).toUpperCase()==='TIBA'?`TELAH TIBA DI ${String(mv.destinasi||'-').toUpperCase()}`:movementLabel(mv.destinasi);}
     const loc=locOf(m);
     if(loc==='DALAM_TRIAGE')return 'DALAM TRIAGE';
@@ -2639,6 +2645,8 @@ async function loadCorAduStatus(){
   // Jika pergerakan terkini sudah TIBA di PMA / ADU / HOSPITAL / BHA atau sudah dipertemukan dengan waris,
   // mangsa tidak lagi dianggap berada di SRC.
   const isSrcActive=m=>{
+    const src=srcByVictim.get(normKey(m));
+    if(String(src?.status_lokasi||'').trim().toUpperCase()==='AIRLINES') return false;
     const mv=latestMovementFor(m);
     if(mv){
       if(mv.dipertemukan_dengan_waris===true) return false;
@@ -3786,7 +3794,23 @@ async function moveSrcToPma(m){
 }
 
 async function transferSrcVictim(m){
- const raw=prompt('Destinasi keluar SRC:\n1 = AIR DISASTER UNIT (ADU)\n2 = HOSPITAL\n3 = BODY HOLDING AREA (BHA)','1');if(!raw)return; if(raw.trim()==='1'){await moveSrcVictim(m,'ADU','AIR DISASTER UNIT (ADU)',prompt('Catatan pemindahan ke ADU:')||'');return} if(raw.trim()==='2'){const h=prompt('Masukkan nama hospital:');if(!h?.trim())return;await moveSrcVictim(m,'HOSPITAL',h.trim(),prompt(`Catatan pemindahan ke ${h.trim()}:`)||'');return} if(raw.trim()==='3'){if(String(m.tag_src_semasa||'').toUpperCase()!=='PUTIH'&&!confirm('Tag SRC semasa bukan PUTIH. Teruskan ke BHA?'))return;await moveSrcVictim(m,'BHA','BODY HOLDING AREA (BHA)',prompt('Catatan pemindahan ke BHA:')||'');return} alert('Pilihan tidak sah.');
+ const raw=prompt('Destinasi keluar SRC:\n1 = AIR DISASTER UNIT (ADU)\n2 = HOSPITAL\n3 = BODY HOLDING AREA (BHA)\n4 = TELAH DIURUSKAN OLEH PIHAK AIRLINES','1');
+ if(!raw)return;
+ if(raw.trim()==='1'){await moveSrcVictim(m,'ADU','AIR DISASTER UNIT (ADU)',prompt('Catatan pemindahan ke ADU:')||'');return}
+ if(raw.trim()==='2'){const h=prompt('Masukkan nama hospital:');if(!h?.trim())return;await moveSrcVictim(m,'HOSPITAL',h.trim(),prompt(`Catatan pemindahan ke ${h.trim()}:`)||'');return}
+ if(raw.trim()==='3'){if(String(m.tag_src_semasa||'').toUpperCase()!=='PUTIH'&&!confirm('Tag SRC semasa bukan PUTIH. Teruskan ke BHA?'))return;await moveSrcVictim(m,'BHA','BODY HOLDING AREA (BHA)',prompt('Catatan pemindahan ke BHA:')||'');return}
+ if(raw.trim()==='4'){await closeSrcByAirlines(m);return}
+ alert('Pilihan tidak sah.');
+}
+
+async function closeSrcByAirlines(m){
+ const label='TELAH DIURUSKAN OLEH PIHAK AIRLINES';
+ if(!confirm(`Sahkan mangsa ${m.no_mangsa} telah diuruskan oleh pihak airlines?`))return;
+ const note=prompt('Catatan / nama pihak airlines (jika ada):')||'';
+ const q=await supabase.from('ecor_src_mangsa').update({status_lokasi:'AIRLINES',destinasi:label,masa_keluar_src:new Date().toISOString(),catatan_pemindahan:note.trim()||null}).eq('id',m.id).eq('operasi_id',assignment.operasi_id);
+ if(q.error){alert(q.error.message);return}
+ alert(`Mangsa ${m.no_mangsa} telah direkodkan sebagai ${label}.`);
+ await loadSrcData();
 }
 
 async function moveSrcVictim(m,statusLokasi,destinasi,note=''){
