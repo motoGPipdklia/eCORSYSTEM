@@ -4069,6 +4069,16 @@ async function attendancePlaces(){
   if(r.error)throw r.error;
   return r.data||[];
 }
+async function attendanceCorOverviewData(){
+  const r=await supabase.rpc('ecor_cor_kehadiran_keseluruhan',{p_operasi_id:assignment.operasi_id});
+  if(r.error)throw r.error;
+  const payload=r.data||{};
+  return {
+    assignments:Array.isArray(payload.assignments)?payload.assignments:[],
+    attendance:Array.isArray(payload.attendance)?payload.attendance:[],
+    places:Array.isArray(payload.places)?payload.places:[]
+  };
+}
 async function attendanceRecords(){
   const r=await supabase.from('ecor_kehadiran_petugas').select('*').eq('operasi_id',assignment.operasi_id);if(r.error)throw r.error;return r.data||[];
 }
@@ -4082,11 +4092,18 @@ async function showAttendancePanel(corOverview=false){
   if(attendanceCurrentCode()==='COR')closeOtherCorChartViews();
   host.innerHTML='<p class="muted">Memuatkan kehadiran petugas...</p>';
   try{
-    const all=await attendanceAssignments(corOverview&&attendanceCurrentCode()==='COR'?null:assignment.tempat_tugas_id), rec=await attendanceRecords();
+    const isCorOverview=corOverview&&attendanceCurrentCode()==='COR';
+    let all,rec,places=null;
+    if(isCorOverview){
+      const overview=await attendanceCorOverviewData();
+      all=overview.assignments;rec=overview.attendance;places=overview.places;
+    }else{
+      all=await attendanceAssignments(assignment.tempat_tugas_id);
+      rec=await attendanceRecords();
+    }
     const rm=new Map(rec.map(x=>[x.penugasan_id,x]));
-    if(corOverview&&attendanceCurrentCode()==='COR'){
-      // FIX 135: Semua modul/submodul aktif dipaparkan walaupun tiada penugasan.
-      const places=await attendancePlaces();
+    if(isCorOverview){
+      // FIX 136: COR membaca keseluruhan operasi melalui RPC SECURITY DEFINER.
       const groups=new Map(places.map(p=>[p.id,{place:p,rows:[]}]));
       all.forEach(x=>{const k=x.tempat_tugas_id;if(!groups.has(k))groups.set(k,{place:x.ecor_tempat_tugas,rows:[]});groups.get(k).rows.push(x);});
       const body=[...groups.values()].sort((a,b)=>(Number(a.place?.susunan??999999)-Number(b.place?.susunan??999999))||String(a.place?.kod||'').localeCompare(String(b.place?.kod||''))).map((g,i)=>{const hadir=g.rows.filter(x=>['HADIR','SELESAI'].includes(rm.get(x.id)?.status)).length,selesai=g.rows.filter(x=>rm.get(x.id)?.status==='SELESAI').length;return `<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(g.place?.kod||'-')}</strong><br><span class="muted">${esc(g.place?.nama||'')}</span>`)}${icpTd(g.rows.length)}${icpTd(hadir)}${icpTd(selesai)}${icpTd(`<button type="button" class="ghost" data-att-place="${esc(g.place?.id||'')}">LIHAT PETUGAS</button>`)}</tr>`}).join('');
@@ -4099,10 +4116,23 @@ async function showAttendancePanel(corOverview=false){
 }
 async function showAttendancePlaceDetail(placeId){
   const box=$('#attendanceDetail');if(!box)return;box.innerHTML='<p class="muted">Memuatkan...</p>';
-  try{const rows=await attendanceAssignments(placeId),rec=await attendanceRecords(),rm=new Map(rec.map(x=>[x.penugasan_id,x]));const temp=document.createElement('div');await renderAttendancePlace(temp,rows,rm,true);box.replaceChildren(...temp.childNodes);}catch(e){box.innerHTML=`<p class="status">${esc(e.message||e)}</p>`;}
+  try{
+    if(attendanceCurrentCode()==='COR'){
+      const overview=await attendanceCorOverviewData();
+      const rows=overview.assignments.filter(x=>x.tempat_tugas_id===placeId);
+      const rm=new Map(overview.attendance.map(x=>[x.penugasan_id,x]));
+      const place=overview.places.find(x=>x.id===placeId)||null;
+      const temp=document.createElement('div');
+      await renderAttendancePlace(temp,rows,rm,true,place);
+      box.replaceChildren(...temp.childNodes);
+    }else{
+      const rows=await attendanceAssignments(placeId),rec=await attendanceRecords(),rm=new Map(rec.map(x=>[x.penugasan_id,x]));
+      const temp=document.createElement('div');await renderAttendancePlace(temp,rows,rm,true);box.replaceChildren(...temp.childNodes);
+    }
+  }catch(e){box.innerHTML=`<p class="status">${esc(e.message||e)}</p>`;}
 }
-async function renderAttendancePlace(host,rows,rm,embedded=false){
-  const place=rows[0]?.ecor_tempat_tugas||assignment.ecor_tempat_tugas;
+async function renderAttendancePlace(host,rows,rm,embedded=false,selectedPlace=null){
+  const place=selectedPlace||rows[0]?.ecor_tempat_tugas||assignment.ecor_tempat_tugas;
   const body=rows.map((x,i)=>{const p=x.profile||{},r=rm.get(x.id),st=r?.status||'BELUM HADIR';return `<tr>${icpTd(i+1)}${icpTd(esc(p.no_badan||'-'))}${icpTd(esc(p.pangkat||'-'))}${icpTd(esc(p.nama||'-'))}${icpTd(esc(x.peranan||p.peranan||'-'))}${icpTd(attendanceFmt(r?.masa_hadir))}${icpTd(attendanceFmt(r?.masa_keluar))}${icpTd(`<strong>${esc(st)}</strong>`)}${icpTd(esc(r?.catatan||'-'))}${icpTd(st==='BELUM HADIR'?`<button data-att-act="hadir" data-assignment="${x.id}">SAHKAN HADIR</button>`:st==='HADIR'?`<button data-att-act="selesai" data-assignment="${x.id}" class="secondary">CHECK-OUT / SELESAI</button>`:'-')}</tr>`}).join('');
   host.innerHTML=`<div class="section-head"><div><p class="eyebrow">${esc(place?.kod||'PETUGAS')}</p><h2>Petugas / Kehadiran</h2><p class="muted">${esc(place?.nama||'')}</p></div>${embedded?'':`<div class="actions"><button id="attRefreshLocal" class="ghost">MUAT SEMULA</button><button id="attCloseLocal" class="ghost">TUTUP</button></div>`}</div>${icpTable(['BIL','NO. BADAN','PANGKAT','NAMA','PERANAN','MASA HADIR','MASA KELUAR','STATUS','CATATAN','TINDAKAN'],body,'1250px')}`;
   host.querySelectorAll('[data-att-act]').forEach(b=>b.onclick=()=>updateAttendance(b.dataset.assignment,b.dataset.attAct));
