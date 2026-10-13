@@ -43,7 +43,14 @@ $('#logout').onclick=async()=>{await supabase.auth.signOut();location.replace('i
 
 $('#userForm').addEventListener('submit',async e=>{
  e.preventDefault();const s=$('#userStatus');s.textContent='Mendaftarkan pengguna...';
- const body={no_badan:$('#uNoBadan').value.trim(),pangkat:$('#uPangkat').value.trim(),nama:$('#uNama').value.trim(),no_telefon:$('#uTelefon').value.trim(),email:$('#uEmail').value.trim(),password:$('#uPassword').value,peranan:$('#uPeranan').value};
+ const body={
+  no_badan:$('#uNoBadan').value.trim().toUpperCase(),
+  pangkat:$('#uPangkat').value.trim().toUpperCase(),
+  nama:$('#uNama').value.trim().toUpperCase(),
+  no_telefon:$('#uTelefon').value.trim(),
+  password:$('#uPassword').value,
+  peranan:$('#uPeranan').value
+};
  try{
   const {data,error}=await supabase.functions.invoke('daftar-pengguna',{body});
   if(error) throw error;if(!data?.success) throw new Error(data?.error||'Pendaftaran gagal.');
