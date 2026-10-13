@@ -2589,7 +2589,7 @@ async function loadCorAduStatus(){
       .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
       .eq('operasi_id',assignment.operasi_id),
     supabase.from('ecor_crc_mangsa')
-      .select('id,no_mangsa,nama_mangsa,jantina,tag_masuk_crc,tag_crc_semasa,catatan,status_lokasi,destinasi,masa_tiba_crc,masa_keluar_crc,catatan_pemindahan')
+      .select('id,no_mangsa,nama_mangsa,jantina,tag_masuk_crc,tag_crc_semasa,catatan,status_lokasi,destinasi,masa_tiba_crc,masa_keluar_crc,catatan_pemindahan,status_dokumentasi,masa_dokumentasi_selesai')
       .eq('operasi_id',assignment.operasi_id),
     supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).in('status',['DALAM_PERJALANAN','TIBA']).order('masa_bertolak',{ascending:false})
   ]);
@@ -2672,18 +2672,43 @@ async function loadCorAduStatus(){
     return [];
   };
   const detailTitle={PUTIH:'PUTIH',MERAH:'MERAH',KUNING:'KUNING',HIJAU:'HIJAU','GENDER:LELAKI':'JANTINA — LELAKI','GENDER:WANITA':'JANTINA — WANITA','GENDER:BELUM DIKENALPASTI':'JANTINA — BELUM DIKENALPASTI',TRIAGE:'TRIAGE',ADU:'AIR DISASTER UNIT (ADU)',BHA:'BODY HOLDING AREA (BHA)',HOSPITAL:'HOSPITAL',SRC:'SURVIVOR RECEPTION CENTRE (SRC)',CRC:'CREW RECEPTION CENTRE (CRC)',PMA:'PRIVATE MATCHING AREA (PMA)',REUNITED:'MANGSA DIPERTEMUKAN DENGAN WARIS',ALL:'JUMLAH MANGSA'};
+  const triageCategoryByVictim=new Map((triageQ.data||[]).map(x=>[normKey(x),String(x.kategori_mangsa||'PENUMPANG').trim().toUpperCase()]));
   // FIX 119: Semua butiran CARTA MANGSA COR memaparkan NAMA MANGSA.
   // Jika nama belum direkodkan, gunakan label yang jelas dan bukan tanda '-'.
+  // FIX 128: Nama mangsa CREW di COR ikut aliran dokumentasi sebenar.
+  // 1) Sebelum dokumentasi CRC selesai: gunakan nama yang direkodkan di TRIAGE.
+  // 2) Selepas dokumentasi CRC selesai: gunakan nama daripada CRC (fallback TRIAGE).
+  // Nilai kosong / '-' tidak dianggap sebagai nama yang sah.
+  const validVictimName=v=>{const x=String(v||'').trim();return x&&x!=='-'?x:'';};
+  const triageNameByVictim=new Map((triageQ.data||[]).map(x=>[normKey(x),validVictimName(x.nama_mangsa)]));
+  const crcByVictim=new Map((crcQ.data||[]).map(x=>[normKey(x),x]));
+  const crcNameByVictim=new Map((crcQ.data||[]).map(x=>[normKey(x),validVictimName(x.nama_mangsa)]));
   const corVictimName=m=>{
-    const direct=String(m?.nama_mangsa||'').trim();
+    const key=normKey(m);
+    const category=String(m?.kategori_mangsa||triageCategoryByVictim?.get?.(key)||'').trim().toUpperCase();
+    if(category==='CREW'){
+      const triageName=triageNameByVictim.get(key);
+      const crcRow=crcByVictim.get(key);
+      const crcDone=String(crcRow?.status_dokumentasi||'').trim().toUpperCase()==='SELESAI';
+      if(crcDone){
+        const crcName=crcNameByVictim.get(key);
+        if(crcName)return crcName;
+      }
+      if(triageName)return triageName;
+      return 'BELUM DIKENAL PASTI';
+    }
+    const direct=validVictimName(m?.nama_mangsa);
     if(direct)return direct;
-    const mv=movementByVictim.get(normKey(m));
-    const movementName=String(mv?.nama_mangsa||'').trim();
-    return movementName||'BELUM DIKENAL PASTI';
+    const mv=movementByVictim.get(key);
+    const movementName=validVictimName(mv?.nama_mangsa);
+    if(movementName)return movementName;
+    const crcName=crcNameByVictim.get(key);
+    if(crcName)return crcName;
+    const triageName=triageNameByVictim.get(key);
+    return triageName||'BELUM DIKENAL PASTI';
   };
   // FIX 121: Paparkan kategori CREW / PENUMPANG pada semua butiran CARTA MANGSA COR.
   // Rekod ADU tidak menyimpan kategori_mangsa, jadi ambil kategori asal daripada rekod TRIAGE menggunakan ID mangsa.
-  const triageCategoryByVictim=new Map((triageQ.data||[]).map(x=>[normKey(x),String(x.kategori_mangsa||'PENUMPANG').trim().toUpperCase()]));
   const corVictimCategory=m=>{
     const direct=String(m?.kategori_mangsa||'').trim().toUpperCase();
     if(direct==='CREW'||direct==='PENUMPANG')return direct;
