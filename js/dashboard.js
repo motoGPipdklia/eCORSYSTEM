@@ -3551,8 +3551,7 @@ function setupVipMediaTopMenu(){
 const REPORT_ONLY_SUBMODULES = [
   { codes:['MPV'], names:['MOBILE PATROL VEHICLE'], label:'MOBILE PATROL VEHICLE (MPV)' },
   { codes:['URB'], names:['UNIT RONDA BERMOTOSIKAL'], label:'UNIT RONDA BERMOTOSIKAL (URB)' },
-  { codes:['RVP'], names:['RENDEZVOUS POINT (RVP) 1','RENDEZVOUS POINT 1'], label:'RENDEZVOUS POINT (RVP) 1' },
-  { codes:['RVP2'], names:['RENDEZVOUS POINT (RVP) 2','RENDEZVOUS POINT 2'], label:'RENDEZVOUS POINT (RVP) 2' },
+  { codes:['RVP'], names:['RENDEZVOUS POINT'], label:'RENDEZVOUS POINT (RVP)' },
   { codes:['INNER CORDON','INNER_CORDON','IC'], names:['INNER CORDON'], label:'INNER CORDON' },
   { codes:['OUTER CORDON','OUTER_CORDON','OC'], names:['OUTER CORDON'], label:'OUTER CORDON' },
   { codes:['PASUKAN SIASATAN (DOKUMENTASI)','SIASATAN DOKUMENTASI','DOKUMENTASI'], names:['PASUKAN SIASATAN (DOKUMENTASI)','PASUKAN SIASATAN DOKUMENTASI'], label:'PASUKAN SIASATAN (DOKUMENTASI)' },
@@ -4065,6 +4064,11 @@ async function attendanceAssignments(placeId=null){
   if(ids.length){const pr=await supabase.from('profiles').select('id,no_badan,pangkat,nama,peranan').in('id',ids);if(pr.error)throw pr.error;prof=pr.data||[];}
   const map=new Map(prof.map(x=>[x.id,x]));return rows.map(x=>({...x,profile:map.get(x.profile_id)||{}}));
 }
+async function attendancePlaces(){
+  const r=await supabase.from('ecor_tempat_tugas').select('id,kod,nama,parent_id,aktif,susunan').eq('aktif',true).order('susunan',{ascending:true});
+  if(r.error)throw r.error;
+  return r.data||[];
+}
 async function attendanceRecords(){
   const r=await supabase.from('ecor_kehadiran_petugas').select('*').eq('operasi_id',assignment.operasi_id);if(r.error)throw r.error;return r.data||[];
 }
@@ -4081,8 +4085,11 @@ async function showAttendancePanel(corOverview=false){
     const all=await attendanceAssignments(corOverview&&attendanceCurrentCode()==='COR'?null:assignment.tempat_tugas_id), rec=await attendanceRecords();
     const rm=new Map(rec.map(x=>[x.penugasan_id,x]));
     if(corOverview&&attendanceCurrentCode()==='COR'){
-      const groups=new Map();all.forEach(x=>{const k=x.tempat_tugas_id;if(!groups.has(k))groups.set(k,{place:x.ecor_tempat_tugas,rows:[]});groups.get(k).rows.push(x);});
-      const body=[...groups.values()].sort((a,b)=>String(a.place?.kod||'').localeCompare(String(b.place?.kod||''))).map((g,i)=>{const hadir=g.rows.filter(x=>['HADIR','SELESAI'].includes(rm.get(x.id)?.status)).length,selesai=g.rows.filter(x=>rm.get(x.id)?.status==='SELESAI').length;return `<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(g.place?.kod||'-')}</strong><br><span class="muted">${esc(g.place?.nama||'')}</span>`)}${icpTd(g.rows.length)}${icpTd(hadir)}${icpTd(selesai)}${icpTd(`<button type="button" class="ghost" data-att-place="${esc(g.place?.id||'')}">LIHAT PETUGAS</button>`)}</tr>`}).join('');
+      // FIX 135: Semua modul/submodul aktif dipaparkan walaupun tiada penugasan.
+      const places=await attendancePlaces();
+      const groups=new Map(places.map(p=>[p.id,{place:p,rows:[]}]));
+      all.forEach(x=>{const k=x.tempat_tugas_id;if(!groups.has(k))groups.set(k,{place:x.ecor_tempat_tugas,rows:[]});groups.get(k).rows.push(x);});
+      const body=[...groups.values()].sort((a,b)=>(Number(a.place?.susunan??999999)-Number(b.place?.susunan??999999))||String(a.place?.kod||'').localeCompare(String(b.place?.kod||''))).map((g,i)=>{const hadir=g.rows.filter(x=>['HADIR','SELESAI'].includes(rm.get(x.id)?.status)).length,selesai=g.rows.filter(x=>rm.get(x.id)?.status==='SELESAI').length;return `<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(g.place?.kod||'-')}</strong><br><span class="muted">${esc(g.place?.nama||'')}</span>`)}${icpTd(g.rows.length)}${icpTd(hadir)}${icpTd(selesai)}${icpTd(`<button type="button" class="ghost" data-att-place="${esc(g.place?.id||'')}">LIHAT PETUGAS</button>`)}</tr>`}).join('');
       host.innerHTML=`<div class="section-head"><div><p class="eyebrow">COR</p><h2>Kehadiran Petugas Keseluruhan</h2><p class="muted">Kehadiran mengikut modul dan submodul bagi operasi semasa.</p></div><div class="actions"><button id="attRefresh" class="ghost">MUAT SEMULA</button><button id="attClose" class="ghost">TUTUP</button></div></div>${icpTable(['BIL','MODUL / SUBMODUL','JUMLAH PETUGAS','HADIR','SELESAI','TINDAKAN'],body,'850px')}<div id="attendanceDetail"></div>`;
       host.querySelectorAll('[data-att-place]').forEach(b=>b.onclick=()=>showAttendancePlaceDetail(b.dataset.attPlace));
       $('#attRefresh').onclick=()=>showAttendancePanel(true);$('#attClose').onclick=()=>{host.hidden=true;};
