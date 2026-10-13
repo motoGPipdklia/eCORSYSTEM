@@ -2256,24 +2256,25 @@ async function forwardIcpReport(source, button) {
 const movementCodes=['TRIAGE','ADU','SRC','CRC','BHA','HOSPITAL','PMA','COR','TEC','ACCC'];
 const movementLabel=d=>({SRC:'MANGSA DALAM PERJALANAN KE SRC',CRC:'MANGSA DALAM PERJALANAN KE CRC',ADU:'MANGSA DALAM PERJALANAN KE ADU',HOSPITAL:'MANGSA DALAM PERJALANAN KE HOSPITAL',BHA:'MANGSA KE BHA',PMA:'MANGSA DALAM PERJALANAN KE PMA'})[String(d||'').toUpperCase()]||`MANGSA DALAM PERJALANAN KE ${String(d||'-').toUpperCase()}`;
 async function createVictimMovement(m,asal,destinasi,destinasiNama,note=''){
- const asalKod=String(asal||'').trim().toUpperCase(),destKod=String(destinasi||'').trim().toUpperCase(),noMangsa=String(m?.no_mangsa||'').trim();
+ const asalKod=String(asal||'').trim().toUpperCase(),destKod=String(destinasi||'').trim().toUpperCase();
  // FIX 125: satu mangsa hanya boleh mempunyai satu perjalanan aktif. Jika percubaan
- // terdahulu sudah berjaya mencipta perjalanan yang sama tetapi kemas kini modul asal
- // gagal, gunakan semula perjalanan tersebut dan teruskan sinkronisasi status.
- const existing=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',noMangsa).eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}).limit(1).maybeSingle();
- if(existing.error){alert(`Gagal menyemak pergerakan aktif mangsa: ${existing.error.message}`);return null}
+ // sebelumnya sempat mencipta rekod, gunakan semula rekod itu dan jangan INSERT kali kedua.
+ const existing=await supabase.from('ecor_pergerakan_mangsa').select('*')
+   .eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa)
+   .eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}).limit(1).maybeSingle();
+ if(existing.error){alert(`Gagal menyemak pergerakan mangsa: ${existing.error.message}`);return null}
  if(existing.data){
-   const same=String(existing.data.asal||'').trim().toUpperCase()===asalKod&&String(existing.data.destinasi||'').trim().toUpperCase()===destKod;
-   if(same)return existing.data;
-   alert(`${noMangsa} masih mempunyai pergerakan aktif ${existing.data.asal||'-'} → ${existing.data.destinasi||'-'}. Sahkan ketibaan atau selesaikan pergerakan tersebut dahulu.`);return null;
+   const sameDest=String(existing.data.destinasi||'').trim().toUpperCase()===destKod;
+   if(!sameDest){alert(`Mangsa ${m.no_mangsa} masih mempunyai pergerakan aktif ke ${existing.data.destinasi_nama||existing.data.destinasi}. Sahkan ketibaan / selesaikan pergerakan itu dahulu.`);return null}
+   return existing.data;
  }
- const payload={operasi_id:assignment.operasi_id,no_mangsa:noMangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_crc_semasa||m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||m.tag_semasa||null,asal:asalKod,destinasi:destKod,destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
+ const payload={operasi_id:assignment.operasi_id,no_mangsa:m.no_mangsa,nama_mangsa:m.nama_mangsa||null,jantina:m.jantina||null,tag_semasa:m.tag_crc_semasa||m.tag_src_semasa||m.tag_adu_semasa||m.tag_triage||m.tag_semasa||null,asal:asalKod,destinasi:destKod,destinasi_nama:destinasiNama||destinasi,status:'DALAM_PERJALANAN',masa_bertolak:new Date().toISOString(),catatan:note.trim()||null,dihantar_oleh:session.user.id};
  const q=await supabase.from('ecor_pergerakan_mangsa').insert(payload).select('*').single();
  if(q.error){
-   // Perlindungan race/klik berganda: semak semula rekod aktif yang mungkin baru tercipta.
-   if(String(q.error.code||'')==='23505'||String(q.error.message||'').includes('ecor_pergerakan_satu_aktif_idx')){
-     const retry=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',noMangsa).eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}).limit(1).maybeSingle();
-     if(!retry.error&&retry.data&&String(retry.data.asal||'').trim().toUpperCase()===asalKod&&String(retry.data.destinasi||'').trim().toUpperCase()===destKod)return retry.data;
+   // Perlindungan tambahan jika dua tindakan berlaku hampir serentak.
+   if(String(q.error.message||'').includes('ecor_pergerakan_satu_aktif_idx')){
+     const retry=await supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).eq('no_mangsa',m.no_mangsa).eq('status','DALAM_PERJALANAN').order('masa_bertolak',{ascending:false}).limit(1).maybeSingle();
+     if(!retry.error&&retry.data&&String(retry.data.destinasi||'').trim().toUpperCase()===destKod)return retry.data;
    }
    alert(`Gagal merekod pergerakan mangsa: ${q.error.message}`);return null
  }
@@ -3798,7 +3799,51 @@ async function moveCrcVictim(m,status,dest,note=''){if(!confirm(`Sahkan ${m.no_m
 async function showCrcHistory(m){const q=await supabase.from('ecor_crc_sejarah_tag').select('*').eq('mangsa_id',m.id).order('masa_perubahan');if(q.error){alert(q.error.message);return}alert(`SEJARAH TAG CRC — ${m.no_mangsa}\n\n${(q.data||[]).map(x=>`${fmt(x.masa_perubahan)} — ${x.tag_sebelum||'-'} → ${x.tag_baharu}`).join('\n')||'Tiada perubahan tag.'}`);}
 async function loadCrcChronology(){const box=$('#crcChartBody');if(!box)return;const q=await supabase.from('ecor_komunikasi').select(`id,tajuk,kandungan,created_at,dari_tempat_tugas_id,kepada_tempat_tugas_id,dari:ecor_tempat_tugas!ecor_komunikasi_dari_tempat_tugas_id_fkey(kod),kepada:ecor_tempat_tugas!ecor_komunikasi_kepada_tempat_tugas_id_fkey(kod)`).eq('operasi_id',assignment.operasi_id).order('created_at',{ascending:true});if(q.error){box.innerHTML=`<p class="status">${esc(q.error.message)}</p>`;return}const id=assignment.tempat_tugas_id,rows=(q.data||[]).filter(x=>x.dari_tempat_tugas_id===id||x.kepada_tempat_tugas_id===id);box.innerHTML=icpTable(['BIL','TARIKH','MASA','PERKARA','CATATAN','PENGHANTAR'],rows.map((x,i)=>{const d=new Date(x.created_at);return `<tr>${icpTd(i+1)}${icpTd(esc(d.toLocaleDateString('ms-MY')))}${icpTd(esc(d.toLocaleTimeString('ms-MY')))}${icpTd(esc(x.tajuk||'-'))}${icpTd(esc(cleanChronologyNote(x.kandungan)||'-'))}${icpTd(esc(x.dari?.kod||'-'))}</tr>`}).join(''),'900px');}
 async function showCrcView(kind){const chart=getCrcChartPanel();if(!chart)return;closeCrcMenuViews();chart.querySelectorAll(':scope > p.muted').forEach(x=>x.style.display='none');if(kind==='MANGSA'){const p=$('#crcPanel');if(p){p.hidden=false;p.style.removeProperty('display');chart.appendChild(p);await loadCrcData()}return}let h=$('#crcChartContent');if(!h){h=document.createElement('div');h.id='crcChartContent';chart.appendChild(h)}h.hidden=false;h.style.removeProperty('display');h.innerHTML=`<div class="section-head"><div><p class="eyebrow">CREW RECEPTION CENTRE</p><h2>Kronologi CRC</h2></div><div class="adu-actions"><button id="crcChronRefresh" class="ghost">MUAT SEMULA</button><button id="crcChronClose" class="ghost">TUTUP</button></div></div><div id="crcChartBody"></div>`;$('#crcChronRefresh').onclick=loadCrcChronology;$('#crcChronClose').onclick=closeCrcMenuViews;await loadCrcChronology();}
-function setupCrcTopMenu(){const header=document.querySelector('header.top');if(!header||String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='CRC')return;const hide=e=>{if(e){e.hidden=true;e.style.setProperty('display','none','important')}};hide($('#instructionCount')?.closest('article.card'));hide($('#instructionList')?.closest('section.panel'));hide($('#chronologyPanel'));hide($('#historyList')?.closest('section.panel'));let w=$('#crcTopMenu');if(!w){w=document.createElement('div');w.id='crcTopMenu';w.className='cor-top-menu';w.innerHTML=`<button id="crcMenuToggle" class="cor-menu-dots">⋮</button><div id="crcMenuDrop" class="cor-menu-dropdown" hidden><button data-crc="reports">PETI MASUK — LAPORAN</button><button data-crc="instructions">PETI MASUK — ARAHAN</button><button data-crc="chronology">KRONOLOGI</button><button data-crc="victims">PENGURUSAN MANGSA CREW CABIN</button><button data-crc="movement">NOTIFIKASI PERGERAKAN MANGSA</button><button data-crc="log">LOG KOMUNIKASI</button></div>`;header.insertBefore(w,header.firstChild)}const t=$('#crcMenuToggle'),d=$('#crcMenuDrop');t.onclick=e=>{e.stopPropagation();d.hidden=!d.hidden};d.onclick=async e=>{const b=e.target.closest('[data-crc]');if(!b)return;d.hidden=true;const a=b.dataset.crc;if(a==='reports')await openCorInbox('LAPORAN');if(a==='instructions')await openCorInbox('ARAHAN');if(a==='chronology')await showCrcView('KRONOLOGI');if(a==='victims')await showCrcView('MANGSA');if(a==='movement'){closeCrcMenuViews();const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();getCrcChartPanel()?.appendChild(p)}}if(a==='log')await openCorCommunicationLog();};}
+function setupCrcTopMenu(){
+  const header=document.querySelector('header.top');
+  if(!header||String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase()!=='CRC')return;
+  const hide=e=>{if(e){e.hidden=true;e.style.setProperty('display','none','important')}};
+  hide($('#instructionCount')?.closest('article.card'));hide($('#instructionList')?.closest('section.panel'));hide($('#chronologyPanel'));hide($('#historyList')?.closest('section.panel'));
+  let w=$('#crcTopMenu');
+  if(!w){
+    w=document.createElement('div');w.id='crcTopMenu';w.className='cor-top-menu';
+    w.innerHTML=`<button id="crcMenuToggle" type="button" class="cor-menu-dots" aria-label="Buka menu CRC" aria-expanded="false">⋮</button>
+      <div id="crcMenuDrop" class="cor-menu-dropdown" hidden>
+        <div class="cor-menu-parent" id="crcInboxMenu">
+          <button type="button" class="cor-menu-inbox cor-menu-chart" aria-haspopup="true" aria-expanded="false">PETI MASUK <span>▶</span></button>
+          <div class="cor-menu-submenu" id="crcInboxSubmenu" hidden>
+            <button type="button" data-crc="reports">LAPORAN</button>
+            <button type="button" data-crc="instructions">ARAHAN</button>
+          </div>
+        </div>
+        <button type="button" data-crc="chronology">KRONOLOGI</button>
+        <button type="button" data-crc="victims">PENGURUSAN MANGSA CREW CABIN</button>
+        <button type="button" data-crc="movement">NOTIFIKASI PERGERAKAN MANGSA</button>
+        <button type="button" data-crc="log">LOG KOMUNIKASI</button>
+      </div>`;
+    header.insertBefore(w,header.firstChild);
+  }
+  const t=$('#crcMenuToggle'),d=$('#crcMenuDrop'),inboxMenu=$('#crcInboxMenu'),inboxBtn=inboxMenu?.querySelector('.cor-menu-inbox'),inboxSub=$('#crcInboxSubmenu');
+  if(!t||!d)return;
+  const closeInbox=()=>{if(inboxSub)inboxSub.hidden=true;inboxBtn?.setAttribute('aria-expanded','false')};
+  const openInbox=()=>{if(inboxSub)inboxSub.hidden=false;inboxBtn?.setAttribute('aria-expanded','true')};
+  const close=()=>{d.hidden=true;t.setAttribute('aria-expanded','false');closeInbox()};
+  if(t.dataset.bound!=='1'){
+    t.dataset.bound='1';
+    t.onclick=e=>{e.stopPropagation();d.hidden?(d.hidden=false,t.setAttribute('aria-expanded','true')):close()};
+    inboxMenu?.addEventListener('mouseenter',openInbox);inboxMenu?.addEventListener('mouseleave',closeInbox);
+    inboxBtn?.addEventListener('click',e=>{e.stopPropagation();inboxSub?.hidden?openInbox():closeInbox()});
+    d.addEventListener('click',async e=>{const b=e.target.closest('[data-crc]');if(!b)return;const a=b.dataset.crc;close();
+      if(a==='reports')await openCorInbox('LAPORAN');
+      if(a==='instructions')await openCorInbox('ARAHAN');
+      if(a==='chronology')await showCrcView('KRONOLOGI');
+      if(a==='victims')await showCrcView('MANGSA');
+      if(a==='movement'){closeCrcMenuViews();const p=$('#victimMovementPanel');if(p){p.hidden=false;p.style.removeProperty('display');await loadVictimMovements();getCrcChartPanel()?.appendChild(p)}}
+      if(a==='log')await openCorCommunicationLog();
+    });
+    document.addEventListener('click',e=>{if(!w.contains(e.target))close()});document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+  }
+}
 
 // ===== FIX 078: ICP — JADUAL DALAM POPUP / MODAL =====
 async function renderIcpAdministration(){
