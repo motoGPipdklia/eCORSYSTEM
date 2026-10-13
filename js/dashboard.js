@@ -2623,9 +2623,12 @@ async function loadCorAduStatus(){
   const movementByVictim=new Map();
   (movementQ.data||[]).forEach(x=>{const k=String(x.no_mangsa||'').trim().toUpperCase();if(k&&!movementByVictim.has(k))movementByVictim.set(k,x);});
   const srcByVictim=new Map((srcQ.data||[]).map(x=>[normKey(x),x]));
+  const crcStatusByVictim=new Map((crcQ.data||[]).map(x=>[normKey(x),x]));
   const statusDestinasi=m=>{
     const src=srcByVictim.get(normKey(m));
     if(String(src?.status_lokasi||'').trim().toUpperCase()==='AIRLINES') return 'TELAH DIURUSKAN OLEH PIHAK AIRLINES';
+    const crc=crcStatusByVictim.get(normKey(m));
+    if(String(crc?.status_lokasi||'').trim().toUpperCase()==='AIRLINES') return 'TELAH DIURUSKAN OLEH PIHAK AIRLINES';
     const mv=movementByVictim.get(normKey(m)); if(mv){if(mv.dipertemukan_dengan_waris===true)return 'DIPERTEMUKAN DENGAN WARIS';return String(mv.status).toUpperCase()==='TIBA'?`TELAH TIBA DI ${String(mv.destinasi||'-').toUpperCase()}`:movementLabel(mv.destinasi);}
     const loc=locOf(m);
     if(loc==='DALAM_TRIAGE')return 'DALAM TRIAGE';
@@ -2666,6 +2669,19 @@ async function loadCorAduStatus(){
   const crcActive=(crcQ.data||[]).filter(x=>['DALAM_CRC','MENUNGGU_PMA'].includes(String(x.status_lokasi||'').trim().toUpperCase())).map(x=>({...x,tag_semasa:x.tag_crc_semasa||x.tag_masuk_crc,kategori_mangsa:'CREW',sumber:'CRC'}));
   const countCrc=crcActive.length;
   const countPma=countAtMovementDest('PMA');
+  // FIX 131: Mangsa yang selesai diuruskan oleh pihak airlines boleh datang dari SRC atau CRC.
+  // Gabungkan berdasarkan ID mangsa supaya rekod yang sama tidak dikira dua kali.
+  const airlinesMap=new Map();
+  const addAirlines=(x,sumber)=>{
+    if(String(x?.status_lokasi||'').trim().toUpperCase()!=='AIRLINES')return;
+    const key=normKey(x);if(!key)return;
+    const base=latest.get(key)||{};
+    airlinesMap.set(key,{...base,...x,sumber,tag_semasa:x.tag_crc_semasa||x.tag_masuk_crc||base.tag_semasa||base.tag_triage,kategori_mangsa:sumber==='CRC'?'CREW':(base.kategori_mangsa||'PENUMPANG')});
+  };
+  (srcQ.data||[]).forEach(x=>addAirlines(x,'SRC'));
+  (crcQ.data||[]).forEach(x=>addAirlines(x,'CRC'));
+  const airlinesRows=[...airlinesMap.values()];
+  const countAirlines=airlinesRows.length;
   const detailRows=(filter)=>{
     if(filter==='ALL') return rows;
     if(['PUTIH','MERAH','KUNING','HIJAU'].includes(filter)) return rows.filter(m=>String(m.tag_semasa||'').toUpperCase()===filter);
@@ -2677,9 +2693,15 @@ async function loadCorAduStatus(){
     if(['BHA','HOSPITAL'].includes(filter)) return rows.filter(m=>locOf(m)===filter);
     if(filter==='PMA') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv&&String(mv.status).toUpperCase()==='TIBA'&&String(mv.destinasi||'').toUpperCase()==='PMA'&&mv.dipertemukan_dengan_waris!==true;});
     if(filter==='REUNITED') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv?.dipertemukan_dengan_waris===true;});
+    if(filter==='AIRLINES') return airlinesRows;
+    if(filter==='TOTAL_STATUS') {
+      const total=new Map();
+      ['TRIAGE','ADU','BHA','HOSPITAL','SRC','CRC','PMA','REUNITED','AIRLINES'].forEach(f=>detailRows(f).forEach(m=>{const k=normKey(m);if(k)total.set(k,m);}));
+      return [...total.values()];
+    }
     return [];
   };
-  const detailTitle={PUTIH:'PUTIH',MERAH:'MERAH',KUNING:'KUNING',HIJAU:'HIJAU','GENDER:LELAKI':'JANTINA — LELAKI','GENDER:WANITA':'JANTINA — WANITA','GENDER:BELUM DIKENALPASTI':'JANTINA — BELUM DIKENALPASTI',TRIAGE:'TRIAGE',ADU:'AIR DISASTER UNIT (ADU)',BHA:'BODY HOLDING AREA (BHA)',HOSPITAL:'HOSPITAL',SRC:'SURVIVOR RECEPTION CENTRE (SRC)',CRC:'CREW RECEPTION CENTRE (CRC)',PMA:'PRIVATE MATCHING AREA (PMA)',REUNITED:'MANGSA DIPERTEMUKAN DENGAN WARIS',ALL:'JUMLAH MANGSA'};
+  const detailTitle={PUTIH:'PUTIH',MERAH:'MERAH',KUNING:'KUNING',HIJAU:'HIJAU','GENDER:LELAKI':'JANTINA — LELAKI','GENDER:WANITA':'JANTINA — WANITA','GENDER:BELUM DIKENALPASTI':'JANTINA — BELUM DIKENALPASTI',TRIAGE:'TRIAGE',ADU:'AIR DISASTER UNIT (ADU)',BHA:'BODY HOLDING AREA (BHA)',HOSPITAL:'HOSPITAL',SRC:'SURVIVOR RECEPTION CENTRE (SRC)',CRC:'CREW RECEPTION CENTRE (CRC)',PMA:'PRIVATE MATCHING AREA (PMA)',REUNITED:'MANGSA DIPERTEMUKAN DENGAN WARIS',AIRLINES:'DIURUSKAN OLEH AIRLINES',TOTAL_STATUS:'JUMLAH KESELURUHAN',ALL:'JUMLAH MANGSA'};
   const triageCategoryByVictim=new Map((triageQ.data||[]).map(x=>[normKey(x),String(x.kategori_mangsa||'PENUMPANG').trim().toUpperCase()]));
   // FIX 119: Semua butiran CARTA MANGSA COR memaparkan NAMA MANGSA.
   // Jika nama belum direkodkan, gunakan label yang jelas dan bukan tanda '-'.
@@ -2744,7 +2766,8 @@ async function loadCorAduStatus(){
       ${tile(13,'13. CRC',countCrc,'CRC')}
       ${tile(14,'14. PMA',countPma,'PMA')}
       ${tile(15,'15. MANGSA DIPERTEMUKAN DENGAN WARIS',countReunited,'REUNITED')}
-      ${tile(16,'16. JUMLAH MANGSA',rows.length,'ALL')}
+      ${tile(16,'16. DIURUSKAN OLEH AIRLINES',countAirlines,'AIRLINES')}
+      ${tile(17,'17. JUMLAH KESELURUHAN',detailRows('TOTAL_STATUS').length,'TOTAL_STATUS')}
     </div></div>`;
     summary.querySelectorAll('[data-cor-filter]').forEach(btn=>btn.addEventListener('click',()=>{
       document.querySelector('#corSummaryDetailModal')?.remove();
@@ -2758,7 +2781,7 @@ async function loadCorAduStatus(){
       document.addEventListener('keydown',onKey);
     }));
   }
-  if(status)status.textContent=`Status mangsa keseluruhan terkini. Jumlah mangsa: ${rows.length}.`;
+  if(status)status.textContent=`Status mangsa keseluruhan terkini. Jumlah keseluruhan (kategori 8 hingga 16): ${detailRows('TOTAL_STATUS').length}.`;
 }
 
 
