@@ -2558,18 +2558,21 @@ async function renderCorAduStatus(){
 async function loadCorAduStatus(){
   if(!['COR','ACCC'].includes(String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase())) return;
 
-  const [triageQ,aduQ,movementQ]=await Promise.all([
+  const [triageQ,aduQ,crcQ,movementQ]=await Promise.all([
     supabase.from('ecor_triage_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,kategori_mangsa,tag_triage,catatan,masa_terima_triage,status_lokasi,destinasi,masa_keluar_triage,catatan_pemindahan')
       .eq('operasi_id',assignment.operasi_id),
     supabase.from('ecor_adu_mangsa')
       .select('id,no_mangsa,nama_mangsa,jantina,tag_triage,tag_adu_semasa,catatan,masa_terima_adu,status_lokasi,destinasi,masa_keluar_adu,catatan_pemindahan')
       .eq('operasi_id',assignment.operasi_id),
+    supabase.from('ecor_crc_mangsa')
+      .select('id,no_mangsa,nama_mangsa,jantina,tag_masuk_crc,tag_crc_semasa,catatan,status_lokasi,destinasi,masa_tiba_crc,masa_keluar_crc,catatan_pemindahan')
+      .eq('operasi_id',assignment.operasi_id),
     supabase.from('ecor_pergerakan_mangsa').select('*').eq('operasi_id',assignment.operasi_id).in('status',['DALAM_PERJALANAN','TIBA']).order('masa_bertolak',{ascending:false})
   ]);
 
   const box=$('#corAduTable'),summary=$('#corAduSummary'),status=$('#corAduStatus');
-  const err=triageQ.error||aduQ.error||movementQ.error;
+  const err=triageQ.error||aduQ.error||crcQ.error||movementQ.error;
   if(err){if(box)box.innerHTML=`<p class="status">${esc(err.message)}</p>`;if(status)status.textContent=err.message;return;}
 
   const normGender=v=>{const x=String(v||'').trim().toUpperCase();if(x==='LELAKI')return 'LELAKI';if(x==='PEREMPUAN'||x==='WANITA')return 'WANITA';return 'BELUM DIKENALPASTI';};
@@ -2628,6 +2631,9 @@ async function loadCorAduStatus(){
   const latestMovement=[...movementByVictim.values()];
   const countAtMovementDest=d=>latestMovement.filter(m=>String(m.status).toUpperCase()==='TIBA'&&String(m.destinasi||'').toUpperCase()===d&&m.dipertemukan_dengan_waris!==true).length;
   const countReunited=latestMovement.filter(m=>m.dipertemukan_dengan_waris===true).length;
+  // FIX 122: CRC diambil terus daripada rekod CREW RECEPTION CENTRE bagi operasi semasa.
+  const crcActive=(crcQ.data||[]).filter(x=>String(x.status_lokasi||'').trim().toUpperCase()==='DALAM_CRC').map(x=>({...x,tag_semasa:x.tag_crc_semasa||x.tag_masuk_crc,kategori_mangsa:'CREW',sumber:'CRC'}));
+  const countCrc=crcActive.length;
   const countPma=countAtMovementDest('PMA');
   const detailRows=(filter)=>{
     if(filter==='ALL') return rows;
@@ -2636,12 +2642,13 @@ async function loadCorAduStatus(){
     if(filter==='TRIAGE') return rows.filter(m=>locOf(m)==='DALAM_TRIAGE');
     if(filter==='ADU') return rows.filter(m=>['DALAM_ADU','ADU'].includes(locOf(m)));
     if(filter==='SRC') return rows.filter(isSrcActive);
+    if(filter==='CRC') return crcActive;
     if(['BHA','HOSPITAL'].includes(filter)) return rows.filter(m=>locOf(m)===filter);
     if(filter==='PMA') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv&&String(mv.status).toUpperCase()==='TIBA'&&String(mv.destinasi||'').toUpperCase()==='PMA'&&mv.dipertemukan_dengan_waris!==true;});
     if(filter==='REUNITED') return rows.filter(m=>{const mv=movementByVictim.get(normKey(m));return mv?.dipertemukan_dengan_waris===true;});
     return [];
   };
-  const detailTitle={PUTIH:'PUTIH',MERAH:'MERAH',KUNING:'KUNING',HIJAU:'HIJAU','GENDER:LELAKI':'JANTINA — LELAKI','GENDER:WANITA':'JANTINA — WANITA','GENDER:BELUM DIKENALPASTI':'JANTINA — BELUM DIKENALPASTI',TRIAGE:'TRIAGE',ADU:'AIR DISASTER UNIT (ADU)',BHA:'BODY HOLDING AREA (BHA)',HOSPITAL:'HOSPITAL',SRC:'SURVIVOR RECEPTION CENTRE (SRC)',PMA:'PRIVATE MATCHING AREA (PMA)',REUNITED:'MANGSA DIPERTEMUKAN DENGAN WARIS',ALL:'JUMLAH MANGSA'};
+  const detailTitle={PUTIH:'PUTIH',MERAH:'MERAH',KUNING:'KUNING',HIJAU:'HIJAU','GENDER:LELAKI':'JANTINA — LELAKI','GENDER:WANITA':'JANTINA — WANITA','GENDER:BELUM DIKENALPASTI':'JANTINA — BELUM DIKENALPASTI',TRIAGE:'TRIAGE',ADU:'AIR DISASTER UNIT (ADU)',BHA:'BODY HOLDING AREA (BHA)',HOSPITAL:'HOSPITAL',SRC:'SURVIVOR RECEPTION CENTRE (SRC)',CRC:'CREW RECEPTION CENTRE (CRC)',PMA:'PRIVATE MATCHING AREA (PMA)',REUNITED:'MANGSA DIPERTEMUKAN DENGAN WARIS',ALL:'JUMLAH MANGSA'};
   // FIX 119: Semua butiran CARTA MANGSA COR memaparkan NAMA MANGSA.
   // Jika nama belum direkodkan, gunakan label yang jelas dan bukan tanda '-'.
   const corVictimName=m=>{
@@ -2678,9 +2685,10 @@ async function loadCorAduStatus(){
       ${tile(10,'10. BHA',countLoc('BHA'),'BHA')}
       ${tile(11,'11. HOSPITAL',countLoc('HOSPITAL'),'HOSPITAL')}
       ${tile(12,'12. SRC',rows.filter(isSrcActive).length,'SRC')}
-      ${tile(13,'13. PMA',countPma,'PMA')}
-      ${tile(14,'14. MANGSA DIPERTEMUKAN DENGAN WARIS',countReunited,'REUNITED')}
-      ${tile(15,'15. JUMLAH MANGSA',rows.length,'ALL')}
+      ${tile(13,'13. CRC',countCrc,'CRC')}
+      ${tile(14,'14. PMA',countPma,'PMA')}
+      ${tile(15,'15. MANGSA DIPERTEMUKAN DENGAN WARIS',countReunited,'REUNITED')}
+      ${tile(16,'16. JUMLAH MANGSA',rows.length,'ALL')}
     </div></div>`;
     summary.querySelectorAll('[data-cor-filter]').forEach(btn=>btn.addEventListener('click',()=>{
       document.querySelector('#corSummaryDetailModal')?.remove();
