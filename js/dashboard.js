@@ -82,6 +82,7 @@ function setupCorTopMenu(){
             <button type="button" data-cor-menu="waris">WARIS</button>
             <button type="button" data-cor-menu="vip">VIP</button>
             <button type="button" data-cor-menu="media">MEDIA</button>
+            <button type="button" data-cor-menu="attendance">KEHADIRAN PETUGAS</button>
           </div>
         </div>
         <div class="cor-menu-parent" id="corInboxMenu">
@@ -173,6 +174,7 @@ function setupCorTopMenu(){
       if(action==='waris') showCorIcpData('WARIS');
       if(action==='vip') showCorIcpData('VIP');
       if(action==='media') showCorIcpData('MEDIA');
+      if(action==='attendance') showAttendancePanel(true);
       if(action==='movement'){
         const panel=$('#victimMovementPanel');
         if(panel){
@@ -847,6 +849,7 @@ async function loadAssignment() {
   setupBhaTopMenu();
   setupVipMediaTopMenu();
   setupReportOnlySubmoduleTopMenu();
+  setupAttendanceModule();
   applyPmaCleanLayout();
 }
 
@@ -3855,4 +3858,68 @@ try {
   console.error('eCOR dashboard boot gagal:', err);
   const statusBox = document.querySelector('#status');
   if (statusBox) statusBox.textContent = `Dashboard gagal dimulakan: ${err?.message || err}`;
+}
+
+// ===== FIX 123: KEHADIRAN PETUGAS — SEMUA MODUL / SUBMODUL =====
+function attendanceCurrentCode(){return String(assignment?.ecor_tempat_tugas?.kod||'').trim().toUpperCase();}
+function attendanceFmt(v){return v?new Date(v).toLocaleString('ms-MY'):'-';}
+function setupAttendanceModule(){
+  if(!assignment)return;
+  // Tambah PETUGAS / KEHADIRAN pada semua menu 3 titik sedia ada.
+  document.querySelectorAll('.cor-menu-dropdown').forEach(menu=>{
+    if(menu.querySelector('[data-attendance-menu]'))return;
+    const b=document.createElement('button');b.type='button';b.dataset.attendanceMenu='1';b.textContent='PETUGAS / KEHADIRAN';
+    b.addEventListener('click',async e=>{e.stopPropagation();menu.hidden=true;await showAttendancePanel(false);});
+    menu.appendChild(b);
+  });
+}
+async function attendanceAssignments(placeId=null){
+  let q=supabase.from('ecor_penugasan').select('id,operasi_id,profile_id,tempat_tugas_id,peranan,aktif,created_at,ecor_tempat_tugas(id,kod,nama)').eq('operasi_id',assignment.operasi_id).eq('aktif',true);
+  if(placeId)q=q.eq('tempat_tugas_id',placeId);
+  const r=await q.order('created_at',{ascending:true}); if(r.error)throw r.error;
+  const rows=r.data||[], ids=[...new Set(rows.map(x=>x.profile_id).filter(Boolean))]; let prof=[];
+  if(ids.length){const pr=await supabase.from('profiles').select('id,no_badan,pangkat,nama,peranan').in('id',ids);if(pr.error)throw pr.error;prof=pr.data||[];}
+  const map=new Map(prof.map(x=>[x.id,x]));return rows.map(x=>({...x,profile:map.get(x.profile_id)||{}}));
+}
+async function attendanceRecords(){
+  const r=await supabase.from('ecor_kehadiran_petugas').select('*').eq('operasi_id',assignment.operasi_id);if(r.error)throw r.error;return r.data||[];
+}
+function ensureAttendanceHost(){
+  let host=$('#attendancePanel');if(host)return host;
+  host=document.createElement('section');host.id='attendancePanel';host.className='panel';host.hidden=true;
+  const chart=getCorChartPanel();(chart||document.querySelector('main')||document.body).appendChild(host);return host;
+}
+async function showAttendancePanel(corOverview=false){
+  const host=ensureAttendanceHost();host.hidden=false;host.style.removeProperty('display');
+  if(attendanceCurrentCode()==='COR')closeOtherCorChartViews();
+  host.innerHTML='<p class="muted">Memuatkan kehadiran petugas...</p>';
+  try{
+    const all=await attendanceAssignments(corOverview&&attendanceCurrentCode()==='COR'?null:assignment.tempat_tugas_id), rec=await attendanceRecords();
+    const rm=new Map(rec.map(x=>[x.penugasan_id,x]));
+    if(corOverview&&attendanceCurrentCode()==='COR'){
+      const groups=new Map();all.forEach(x=>{const k=x.tempat_tugas_id;if(!groups.has(k))groups.set(k,{place:x.ecor_tempat_tugas,rows:[]});groups.get(k).rows.push(x);});
+      const body=[...groups.values()].sort((a,b)=>String(a.place?.kod||'').localeCompare(String(b.place?.kod||''))).map((g,i)=>{const hadir=g.rows.filter(x=>['HADIR','SELESAI'].includes(rm.get(x.id)?.status)).length,selesai=g.rows.filter(x=>rm.get(x.id)?.status==='SELESAI').length;return `<tr>${icpTd(i+1)}${icpTd(`<strong>${esc(g.place?.kod||'-')}</strong><br><span class="muted">${esc(g.place?.nama||'')}</span>`)}${icpTd(g.rows.length)}${icpTd(hadir)}${icpTd(selesai)}${icpTd(`<button type="button" class="ghost" data-att-place="${esc(g.place?.id||'')}">LIHAT PETUGAS</button>`)}</tr>`}).join('');
+      host.innerHTML=`<div class="section-head"><div><p class="eyebrow">COR</p><h2>Kehadiran Petugas Keseluruhan</h2><p class="muted">Kehadiran mengikut modul dan submodul bagi operasi semasa.</p></div><div class="actions"><button id="attRefresh" class="ghost">MUAT SEMULA</button><button id="attClose" class="ghost">TUTUP</button></div></div>${icpTable(['BIL','MODUL / SUBMODUL','JUMLAH PETUGAS','HADIR','SELESAI','TINDAKAN'],body,'850px')}<div id="attendanceDetail"></div>`;
+      host.querySelectorAll('[data-att-place]').forEach(b=>b.onclick=()=>showAttendancePlaceDetail(b.dataset.attPlace));
+      $('#attRefresh').onclick=()=>showAttendancePanel(true);$('#attClose').onclick=()=>{host.hidden=true;};
+    }else await renderAttendancePlace(host,all,rm);
+    host.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){host.innerHTML=`<p class="status">${esc(e.message||e)}</p>`;}
+}
+async function showAttendancePlaceDetail(placeId){
+  const box=$('#attendanceDetail');if(!box)return;box.innerHTML='<p class="muted">Memuatkan...</p>';
+  try{const rows=await attendanceAssignments(placeId),rec=await attendanceRecords(),rm=new Map(rec.map(x=>[x.penugasan_id,x]));const temp=document.createElement('div');await renderAttendancePlace(temp,rows,rm,true);box.replaceChildren(...temp.childNodes);}catch(e){box.innerHTML=`<p class="status">${esc(e.message||e)}</p>`;}
+}
+async function renderAttendancePlace(host,rows,rm,embedded=false){
+  const place=rows[0]?.ecor_tempat_tugas||assignment.ecor_tempat_tugas;
+  const body=rows.map((x,i)=>{const p=x.profile||{},r=rm.get(x.id),st=r?.status||'BELUM HADIR';return `<tr>${icpTd(i+1)}${icpTd(esc(p.no_badan||'-'))}${icpTd(esc(p.pangkat||'-'))}${icpTd(esc(p.nama||'-'))}${icpTd(esc(x.peranan||p.peranan||'-'))}${icpTd(attendanceFmt(r?.masa_hadir))}${icpTd(attendanceFmt(r?.masa_keluar))}${icpTd(`<strong>${esc(st)}</strong>`)}${icpTd(esc(r?.catatan||'-'))}${icpTd(st==='BELUM HADIR'?`<button data-att-act="hadir" data-assignment="${x.id}">SAHKAN HADIR</button>`:st==='HADIR'?`<button data-att-act="selesai" data-assignment="${x.id}" class="secondary">CHECK-OUT / SELESAI</button>`:'-')}</tr>`}).join('');
+  host.innerHTML=`<div class="section-head"><div><p class="eyebrow">${esc(place?.kod||'PETUGAS')}</p><h2>Petugas / Kehadiran</h2><p class="muted">${esc(place?.nama||'')}</p></div>${embedded?'':`<div class="actions"><button id="attRefreshLocal" class="ghost">MUAT SEMULA</button><button id="attCloseLocal" class="ghost">TUTUP</button></div>`}</div>${icpTable(['BIL','NO. BADAN','PANGKAT','NAMA','PERANAN','MASA HADIR','MASA KELUAR','STATUS','CATATAN','TINDAKAN'],body,'1250px')}`;
+  host.querySelectorAll('[data-att-act]').forEach(b=>b.onclick=()=>updateAttendance(b.dataset.assignment,b.dataset.attAct));
+  if(!embedded){$('#attRefreshLocal').onclick=()=>showAttendancePanel(false);$('#attCloseLocal').onclick=()=>{ensureAttendanceHost().hidden=true;};}
+}
+async function updateAttendance(penugasanId,action){
+  const catatan=prompt('Catatan (pilihan):','')||null,now=new Date().toISOString();
+  const payload={operasi_id:assignment.operasi_id,penugasan_id:penugasanId,status:action==='hadir'?'HADIR':'SELESAI',catatan,dikemaskini_oleh:session.user.id,updated_at:now};
+  if(action==='hadir')payload.masa_hadir=now;else payload.masa_keluar=now;
+  const r=await supabase.from('ecor_kehadiran_petugas').upsert(payload,{onConflict:'penugasan_id'});if(r.error){alert(r.error.message);return;}await showAttendancePanel(false);
 }
